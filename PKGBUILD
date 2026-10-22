@@ -4,7 +4,7 @@ pkgver=1.0.0
 pkgrel=1
 pkgdesc="DeckComp: Companion server & workflow controller for Linux desktop (Wayland/PipeWire) and Android"
 arch=('any')
-url="https://github.com/Aradhy-Arch/deckcomp"
+url="https://github.com/Aradhy-arch/deckcomp"
 license=('MIT')
 depends=(
     'python'
@@ -25,7 +25,7 @@ optdepends=(
 )
 install=deckcomp.install
 source=("$pkgname-$pkgver.tar.gz::$url/archive/v$pkgver.tar.gz")
-sha256sums=('SKIP')
+sha256sums=('3ce4426c62360804bbf7085ba0453ebad385f1f7e726322f1f43634ed65ebf0a')
 
 package() {
     # If building locally from repo:
