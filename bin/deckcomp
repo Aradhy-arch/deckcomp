@@ -1,0 +1,425 @@
+#!/usr/bin/env python3
+"""
+DeckComp CLI: Unified control, file-drop staging, and workstation manager.
+"""
+import argparse
+import json
+import os
+import shutil
+import socket
+import subprocess
+import sys
+import time
+import urllib.error
+import urllib.request
+from pathlib import Path
+
+DEFAULT_PORT = int(os.environ.get("DECK_PORT", "8088"))
+LEGACY_CONFIG_DIR = Path.home() / ".config" / "deckcompanion"
+PRIMARY_CONFIG_DIR = Path.home() / ".config" / "deckcomp"
+CONFIG_DIR = PRIMARY_CONFIG_DIR if PRIMARY_CONFIG_DIR.exists() or not LEGACY_CONFIG_DIR.exists() else LEGACY_CONFIG_DIR
+TOKEN_FILE = CONFIG_DIR / "token"
+PAIRED_DEVICES_FILE = CONFIG_DIR / "paired_devices.json"
+
+LEGACY_OUTBOX_DIR = Path.home() / ".local" / "share" / "deckcompanion" / "outbox"
+PRIMARY_OUTBOX_DIR = Path.home() / ".local" / "share" / "deckcomp" / "outbox"
+OUTBOX_DIR = PRIMARY_OUTBOX_DIR if PRIMARY_OUTBOX_DIR.exists() or not LEGACY_OUTBOX_DIR.exists() else LEGACY_OUTBOX_DIR
+OUTBOX_INDEX_FILE = OUTBOX_DIR / "index.json"
+
+
+def get_auth_token() -> str:
+    env_token = os.environ.get("DECK_AUTH_TOKEN")
+    if env_token and env_token.strip():
+        return env_token.strip()
+    if TOKEN_FILE.exists():
+        try:
+            return TOKEN_FILE.read_text(encoding="utf-8").strip()
+        except OSError:
+            pass
+    return ""
+
+
+def get_local_ips() -> list:
+    ips = []
+    try:
+        # Use ip route to find primary local LAN IP
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(("8.8.8.8", 80))
+        primary = s.getsockname()[0]
+        s.close()
+        if primary and primary != "127.0.0.1":
+            ips.append(primary)
+    except Exception:
+        pass
+
+    try:
+        hostname = socket.gethostname()
+        for ip in socket.gethostbyname_ex(hostname)[2]:
+            if not ip.startswith("127.") and ip not in ips:
+                ips.append(ip)
+    except Exception:
+        pass
+
+    return ips or ["127.0.0.1"]
+
+
+def send_api_request(endpoint: str, method: str = "GET", data: dict = None, timeout: float = 4.0) -> dict:
+    url = f"http://127.0.0.1:{DEFAULT_PORT}/api/v1{endpoint}"
+    headers = {"Accept": "application/json"}
+    payload = None
+    if data is not None:
+        headers["Content-Type"] = "application/json"
+        payload = json.dumps(data).encode("utf-8")
+
+    token = get_auth_token()
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+
+    req = urllib.request.Request(url, data=payload, headers=headers, method=method)
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as response:
+            return json.loads(response.read().decode("utf-8"))
+    except urllib.error.HTTPError as e:
+        try:
+            err_body = json.loads(e.read().decode("utf-8"))
+            detail = err_body.get("detail", str(e))
+        except Exception:
+            detail = str(e)
+        raise RuntimeError(f"HTTP {e.code}: {detail}")
+    except urllib.error.URLError as e:
+        raise ConnectionError(f"Cannot connect to DeckComp daemon on port {DEFAULT_PORT}: {e.reason}")
+
+
+# ---------------- COMMAND IMPLEMENTATIONS ---------------- #
+
+def cmd_status(args):
+    print("\033[1;35m==> DeckComp Workstation Status\033[0m")
+    
+    # 1. Check systemd service state
+    svc_state = "unknown"
+    for unit in ("deckcomp.service", "deck-companion.service"):
+        try:
+            res = subprocess.run(
+                ["systemctl", "--user", "is-active", unit],
+                capture_output=True,
+                text=True,
+                check=False
+            )
+            out = res.stdout.strip()
+            if out == "active":
+                svc_state = f"\033[1;32m● active (running)\033[0m ({unit})"
+                break
+            elif out in ("inactive", "failed"):
+                svc_state = f"\033[1;31m○ {out}\033[0m ({unit})"
+        except Exception:
+            pass
+
+    print(f"  Service:       {svc_state}")
+
+    # 2. Daemon API Health
+    daemon_online = False
+    try:
+        health = send_api_request("/health", method="GET", timeout=2.0)
+        daemon_online = True
+        print(f"  Daemon API:    \033[1;32mOnline\033[0m (v{health.get('version', '1.0.0')})")
+        print(f"  Host Session:  {health.get('session_type', 'wayland')} on {health.get('hostname', socket.gethostname())}")
+    except Exception as e:
+        print(f"  Daemon API:    \033[1;31mUnreachable\033[0m ({e})")
+
+    # 3. Network Addresses
+    ips = get_local_ips()
+    ip_list_str = ", ".join(f"http://{ip}:{DEFAULT_PORT}" for ip in ips)
+    print(f"  Endpoints:     \033[1;36m{ip_list_str}\033[0m")
+
+    # 4. Paired Devices
+    paired_count = 0
+    if PAIRED_DEVICES_FILE.exists():
+        try:
+            devices = json.loads(PAIRED_DEVICES_FILE.read_text(encoding="utf-8"))
+            paired_count = len(devices)
+            print(f"  Paired Phones: \033[1;33m{paired_count} device(s)\033[0m")
+            for dev_id, info in devices.items():
+                name = info.get("device_name", "Phone")
+                print(f"    • {name} [{dev_id}]")
+        except Exception:
+            pass
+    if paired_count == 0:
+        print("  Paired Phones: \033[0;90m0 paired devices (ready for pairing)\033[0m")
+
+    # 5. Outbox Pending Downloads
+    pending_count = 0
+    if OUTBOX_INDEX_FILE.exists():
+        try:
+            items = json.loads(OUTBOX_INDEX_FILE.read_text(encoding="utf-8"))
+            pending_count = len(items)
+            print(f"  Host Outbox:   {pending_count} file(s) waiting for mobile download")
+        except Exception:
+            pass
+
+
+def cmd_send(args):
+    """Stages a file on Arch host for mobile phone download."""
+    if not args.file:
+        print("Error: No file specified. Usage: deckcomp send <path-to-file>", file=sys.stderr)
+        sys.exit(1)
+
+    target_path = Path(args.file).resolve()
+    if not target_path.exists():
+        print(f"Error: File not found: {target_path}", file=sys.stderr)
+        sys.exit(1)
+
+    if not target_path.is_file():
+        print(f"Error: Path is not a regular file: {target_path}", file=sys.stderr)
+        sys.exit(1)
+
+    try:
+        res = send_api_request("/share/stage", method="POST", data={"path": str(target_path)})
+        filename = res.get("filename", target_path.name)
+        size_kb = max(1, res.get("size_bytes", 0) // 1024)
+        print(f"\033[1;32m✓ Staged '{filename}' ({size_kb} KB) for mobile download.\033[0m")
+        print("  Open DeckComp on your phone to download it in File Drop.")
+    except Exception as e:
+        print(f"\033[1;31mError staging file:\033[0m {e}", file=sys.stderr)
+        sys.exit(1)
+
+
+def cmd_devices(args):
+    """Lists currently paired mobile devices."""
+    if not PAIRED_DEVICES_FILE.exists():
+        print("No devices paired yet.")
+        return
+
+    try:
+        devices = json.loads(PAIRED_DEVICES_FILE.read_text(encoding="utf-8"))
+        if not devices:
+            print("No devices paired yet.")
+            return
+
+        print(f"\033[1;35m==> Paired Devices ({len(devices)}):\033[0m")
+        for dev_id, info in devices.items():
+            name = info.get("device_name", "Unknown")
+            paired_time = info.get("paired_at", 0)
+            date_str = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(paired_time)) if paired_time else "Unknown"
+            print(f"  \033[1;32m• {name}\033[0m")
+            print(f"    ID:        {dev_id}")
+            print(f"    Paired At: {date_str}")
+    except Exception as e:
+        print(f"Error reading paired devices: {e}", file=sys.stderr)
+
+
+def cmd_unpair(args):
+    """Revokes pairing for a device ID."""
+    if not args.device_id:
+        print("Error: Specify device ID to unpair. See 'deckcomp devices'", file=sys.stderr)
+        sys.exit(1)
+
+    try:
+        res = send_api_request(f"/pair/{args.device_id.strip()}", method="DELETE")
+        status = res.get("status")
+        if status == "unpaired":
+            print(f"\033[1;32m✓ Device '{args.device_id}' successfully unpaired.\033[0m")
+        else:
+            print(f"Device '{args.device_id}' was not found.")
+    except Exception as e:
+        print(f"Error: {e}", file=sys.stderr)
+        sys.exit(1)
+
+
+def cmd_outbox(args):
+    """Lists or clears outbox staged files."""
+    if not OUTBOX_INDEX_FILE.exists():
+        print("Outbox is empty.")
+        return
+    try:
+        data = json.loads(OUTBOX_INDEX_FILE.read_text(encoding="utf-8"))
+        if not data:
+            print("Outbox is empty.")
+            return
+
+        if getattr(args, "clear", False):
+            for file_id, item in list(data.items()):
+                f_path = OUTBOX_DIR / item.get("stored_name", "")
+                if f_path.exists():
+                    try:
+                        f_path.unlink()
+                    except OSError:
+                        pass
+            OUTBOX_INDEX_FILE.write_text("{}", encoding="utf-8")
+            print("\033[1;32m✓ Outbox cleared.\033[0m")
+            return
+
+        print(f"\033[1;35m==> Outbox Staged Files ({len(data)}):\033[0m")
+        for file_id, item in data.items():
+            f_name = item.get("filename", "unknown")
+            size_kb = max(1, item.get("size_bytes", 0) // 1024)
+            staged_at = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(item.get("staged_at", 0)))
+            print(f"  \033[1;32m• {f_name}\033[0m ({size_kb} KB) - ID: {item.get('id', file_id)}")
+            print(f"    Staged At: {staged_at}")
+    except Exception as e:
+        print(f"Error reading outbox: {e}", file=sys.stderr)
+
+
+def cmd_pair(args):
+    """Displays pairing instructions and host endpoints."""
+    print("\033[1;35m==> DeckComp Mobile Pairing Guide\033[0m\n")
+    ips = get_local_ips()
+    print("  1. Ensure your Android phone is connected to the same Wi-Fi / local network.")
+    print("  2. Open the \033[1;35mDeckComp\033[0m app on Android and tap \033[1m'Pair New PC'\033[0m.")
+    print("  3. If your PC is discovered automatically, tap it; otherwise enter:")
+    for ip in ips:
+        print(f"       \033[1;36mIP:   {ip}\033[0m")
+    print(f"       \033[1;36mPort: {DEFAULT_PORT}\033[0m")
+    print("  4. Click 'Pair' in the app. A 6-digit PIN notification will appear on this desktop.")
+    print("  5. Enter the PIN on your phone to complete pairing!\n")
+
+
+def cmd_token(args):
+    """Displays the master daemon authentication token."""
+    token = get_auth_token()
+    if token:
+        print(f"\033[1;35mHost Master Auth Token:\033[0m")
+        print(token)
+    else:
+        print(f"No auth token file found in {TOKEN_FILE}")
+
+
+def cmd_service_control(action: str):
+    """Starts, stops, or restarts the systemd user service."""
+    unit = "deckcomp.service"
+    try:
+        subprocess.run(["systemctl", "--user", action, unit], check=True)
+        print(f"\033[1;32m✓ Executed 'systemctl --user {action} {unit}'\033[0m")
+    except subprocess.CalledProcessError as e:
+        # Fallback to deck-companion.service
+        try:
+            subprocess.run(["systemctl", "--user", action, "deck-companion.service"], check=True)
+            print(f"\033[1;32m✓ Executed 'systemctl --user {action} deck-companion.service'\033[0m")
+        except Exception:
+            print(f"Failed to {action} service: {e}", file=sys.stderr)
+            sys.exit(1)
+
+
+def cmd_logs(args):
+    """Follows systemd journal logs for DeckComp."""
+    try:
+        subprocess.run(
+            ["journalctl", "--user", "-u", "deckcomp.service", "-u", "deck-companion.service", "-f", "-n", "50"]
+        )
+    except KeyboardInterrupt:
+        pass
+
+
+def cmd_doctor(args):
+    """Runs a complete self-diagnostic check on environment and utilities."""
+    print("\033[1;35m==> DeckComp Workstation Doctor Diagnostic\033[0m\n")
+
+    # 1. Wayland / Display
+    wayland_display = os.environ.get("WAYLAND_DISPLAY")
+    if wayland_display:
+        print(f"  [\033[1;32mOK\033[0m] Wayland Display Socket: {wayland_display}")
+    else:
+        print(f"  [\033[1;33mWARN\033[0m] WAYLAND_DISPLAY not set in current shell (checking runtime dir...)")
+
+    # 2. Tools
+    tools = [
+        ("wl-copy / wl-paste", "wl-paste", "Required for Wayland clipboard synchronization"),
+        ("notify-send", "notify-send", "Required for desktop pairing notifications & alerts"),
+        ("playerctl", "playerctl", "Required for media playback & MPRIS control"),
+        ("wpctl", "wpctl", "Required for PipeWire volume attenuation"),
+        ("lavat", "lavat", "Optional eye-candy visualizer"),
+        ("cbonsai", "cbonsai", "Optional eye-candy visualizer"),
+    ]
+
+    for label, binary, purpose in tools:
+        found = shutil.which(binary)
+        if found:
+            print(f"  [\033[1;32mOK\033[0m] {label:<22} -> {found}")
+        else:
+            urgency = "WARN" if "Optional" in purpose else "FAIL"
+            color = "\033[1;33m" if urgency == "WARN" else "\033[1;31m"
+            print(f"  [{color}{urgency}\033[0m] {label:<22} missing! ({purpose})")
+
+    # 3. Daemon connectivity
+    print()
+    try:
+        health = send_api_request("/health", timeout=2.0)
+        print(f"  [\033[1;32mOK\033[0m] Localhost Daemon: HTTP 200 OK (v{health.get('version')})")
+    except Exception as e:
+        print(f"  [\033[1;31mFAIL\033[0m] Localhost Daemon: {e}")
+
+
+def main():
+    parser = argparse.ArgumentParser(
+        prog="deckcomp",
+        description="DeckComp: Zero-bloat Arch Linux companion daemon and workflow controller."
+    )
+    subparsers = parser.add_subparsers(dest="command", help="Available commands")
+
+    # status
+    subparsers.add_parser("status", help="Show daemon, network, and paired devices status")
+
+    # send & drop
+    send_parser = subparsers.add_parser("send", help="Stage a file on host for mobile phone download")
+    send_parser.add_argument("file", help="Path to file to share with phone")
+
+    drop_parser = subparsers.add_parser("drop", help="Stage a file on host for mobile phone download (alias for send)")
+    drop_parser.add_argument("file", help="Path to file to share with phone")
+
+    # outbox
+    outbox_parser = subparsers.add_parser("outbox", help="List or manage files staged in host outbox")
+    outbox_parser.add_argument("--clear", action="store_true", help="Clear all staged files from outbox")
+
+    # pair
+    subparsers.add_parser("pair", help="Display connection endpoints and pairing guide")
+
+    # devices
+    subparsers.add_parser("devices", help="List all currently paired phones")
+
+    # unpair
+    unpair_parser = subparsers.add_parser("unpair", help="Revoke device pairing")
+    unpair_parser.add_argument("device_id", help="Device ID to unpair")
+
+    # service controls
+    subparsers.add_parser("start", help="Start the background deckcomp systemd user service")
+    subparsers.add_parser("stop", help="Stop the background deckcomp systemd user service")
+    subparsers.add_parser("restart", help="Restart the background deckcomp systemd user service")
+    subparsers.add_parser("logs", help="Follow live daemon logs")
+
+    # token
+    subparsers.add_parser("token", help="Show host master authentication token")
+
+    # doctor
+    subparsers.add_parser("doctor", help="Run system diagnostics for Wayland, PipeWire, and tools")
+
+    args = parser.parse_args()
+
+    if not args.command or args.command == "status":
+        cmd_status(args)
+    elif args.command in ("send", "drop"):
+        cmd_send(args)
+    elif args.command == "outbox":
+        cmd_outbox(args)
+    elif args.command == "pair":
+        cmd_pair(args)
+    elif args.command == "devices":
+        cmd_devices(args)
+    elif args.command == "unpair":
+        cmd_unpair(args)
+    elif args.command == "start":
+        cmd_service_control("start")
+    elif args.command == "stop":
+        cmd_service_control("stop")
+    elif args.command == "restart":
+        cmd_service_control("restart")
+    elif args.command == "logs":
+        cmd_logs(args)
+    elif args.command == "token":
+        cmd_token(args)
+    elif args.command == "doctor":
+        cmd_doctor(args)
+    else:
+        parser.print_help()
+
+
+if __name__ == "__main__":
+    main()

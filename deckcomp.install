@@ -1,0 +1,23 @@
+post_install() {
+    echo ":: DeckComp host daemon installed successfully."
+    echo ":: To enable and start the user service, run:"
+    echo "   systemctl --user daemon-reload"
+    echo "   systemctl --user enable --now deckcomp.service"
+    echo ":: "
+    echo ":: CLI commands available:"
+    echo "   deckcomp status      # View status and paired devices"
+    echo "   deckcomp send <file> # Stage file for mobile drop"
+    echo "   deckcomp doctor      # Run self-diagnostic check"
+}
+
+post_upgrade() {
+    echo ":: Restarting DeckComp user service if active..."
+    systemctl --user daemon-reload
+    systemctl --user try-restart deckcomp.service || true
+}
+
+pre_remove() {
+    echo ":: Stopping DeckComp user service..."
+    systemctl --user stop deckcomp.service 2>/dev/null || true
+    systemctl --user disable deckcomp.service 2>/dev/null || true
+}

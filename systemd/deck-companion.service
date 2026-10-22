@@ -1,0 +1,22 @@
+[Unit]
+Description=DeckComp Headless Host Daemon
+Documentation=https://github.com/deckcompanion/deckcompanion
+PartOf=graphical-session.target
+After=graphical-session.target
+
+[Service]
+Type=simple
+Environment="DECK_HOST=0.0.0.0"
+WorkingDirectory=%h/companion-server
+ExecStart=%h/companion-server/run.sh
+Restart=on-failure
+RestartSec=3s
+KillMode=mixed
+
+# Security boundaries with write permissions for Downloads, configs, outbox, and user runtime socket
+ProtectSystem=strict
+ReadWritePaths=%h/Downloads %h/.config/deckcompanion %h/.local/share/deckcompanion %h/companion-server /run/user/%U /tmp
+ProtectHome=read-only
+
+[Install]
+WantedBy=graphical-session.target

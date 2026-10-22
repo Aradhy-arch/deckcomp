@@ -1,0 +1,23 @@
+[Unit]
+Description=DeckComp Headless Host Daemon
+Documentation=https://github.com/Aradhy-Arch/deckcomp
+PartOf=graphical-session.target
+After=graphical-session.target
+
+[Service]
+Type=simple
+Environment="DECK_HOST=0.0.0.0"
+Environment="DECK_PORT=8088"
+WorkingDirectory=%h/.local/share/deckcomp
+ExecStart=%h/.local/share/deckcomp/venv/bin/uvicorn main:app --host 0.0.0.0 --port 8088 --log-level info
+Restart=on-failure
+RestartSec=3s
+KillMode=mixed
+
+# Security sandbox
+ProtectSystem=strict
+ReadWritePaths=%h/Downloads %h/.config/deckcomp %h/.config/deckcompanion %h/.local/share/deckcomp %h/.local/share/deckcompanion /run/user/%U /tmp
+ProtectHome=read-only
+
+[Install]
+WantedBy=graphical-session.target

@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Service
+ServiceTypes=KonqPopupMenu/Plugin
+MimeType=all/allfiles;
+Actions=DeckSend;
+X-KDE-Priority=TopLevel
+X-KDE-Submenu=DeckComp
+
+[Desktop Action DeckSend]
+Name=Send to Phone (DeckComp)
+Icon=deckcomp
+Exec=deck-send %f

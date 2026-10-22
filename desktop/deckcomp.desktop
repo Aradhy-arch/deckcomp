@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=DeckComp
+GenericName=Desktop Companion Controller
+Comment=Host daemon and status controller for DeckComp Android companion
+Exec=deckcomp doctor
+Terminal=true
+Icon=deckcomp
+Categories=Utility;Network;AudioVideo;
+Keywords=companion;remote;deck;wayland;pipewire;android;
+StartupNotify=false

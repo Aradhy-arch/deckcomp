@@ -1,0 +1,25 @@
+pkgbase = deckcomp
+	pkgdesc = DeckComp: Companion server & workflow controller for Linux desktop (Wayland/PipeWire) and Android
+	pkgver = 1.0.0
+	pkgrel = 1
+	url = https://github.com/Aradhy-Arch/deckcomp
+	install = deckcomp.install
+	arch = any
+	license = MIT
+	depends = python
+	depends = python-fastapi
+	depends = python-uvicorn
+	depends = python-pydantic
+	depends = python-multipart
+	depends = python-aiofiles
+	depends = wl-clipboard
+	depends = libnotify
+	depends = playerctl
+	depends = pipewire
+	optdepends = lavat: Matrix fluid terminal visualizer
+	optdepends = cbonsai: Ambient bonsai tree terminal visualizer
+	optdepends = dolphin: For KDE Dolphin file-manager right-click send action
+	source = deckcomp-1.0.0.tar.gz::https://github.com/Aradhy-Arch/deckcomp/archive/v1.0.0.tar.gz
+	sha256sums = SKIP
+
+pkgname = deckcomp

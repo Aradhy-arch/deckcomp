@@ -1,0 +1,45 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "deckcomp"
+version = "1.0.0"
+description = "DeckComp: Companion server & workflow controller for Linux desktop (Wayland/PipeWire) and Android"
+readme = "README.md"
+requires-python = ">=3.10"
+license = {text = "MIT"}
+authors = [
+    {name = "DeckComp Contributors"}
+]
+keywords = ["wayland", "pipewire", "companion", "remote", "android", "workstation"]
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Environment :: X11 Applications",
+    "Intended Audience :: End Users/Desktop",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: POSIX :: Linux",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Topic :: System :: Hardware",
+]
+dependencies = [
+    "fastapi>=0.115.0",
+    "uvicorn[standard]>=0.32.0",
+    "python-multipart>=0.0.12",
+    "pydantic>=2.9.0",
+    "aiofiles>=24.1.0",
+]
+
+[project.scripts]
+deckcomp = "deckcomp_entry:cli_main"
+deck-send = "deckcomp_entry:send_main"
+deckcomp-daemon = "deckcomp_entry:daemon_main"
+
+[tool.setuptools]
+py-modules = ["main", "config", "env_resolver", "subprocess_runner", "deckcomp_entry"]
+packages = ["services"]
