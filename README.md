@@ -1,163 +1,149 @@
-# DeckComp Desktop Daemon & CLI
+# 🐧 DeckComp
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Platform](https://img.shields.io/badge/Platform-Linux%20(Wayland%2FPipeWire)-blue.svg)](#)
-[![Android Companion](https://img.shields.io/badge/Companion-Android%20App-green.svg)](#)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
+[![Platform](https://img.shields.io/badge/Platform-Linux%20(Wayland)-blue.svg)](#)
+[![Android](https://img.shields.io/badge/Client-Android-green.svg)](#)
 
-**DeckComp** is a high-performance, lightweight host daemon and workstation controller for Linux desktops (Arch, Fedora, Debian/Ubuntu). It connects seamlessly with the **DeckComp Android companion app** over local Wi-Fi, turning your phone into an interactive hardware control deck, clipboard bridge, and file drop hub.
-
----
-
-## Features
-
-- **🚀 Two-Way Instant File Drops**:
-  - **Phone to PC**: Drop files from Android directly into `~/Downloads` on your PC.
-  - **PC to Phone**: Drop files from terminal (`deck-send <file>`) or **right-click any file** in KDE Dolphin or GNOME Nautilus.
-- **📋 Wayland Clipboard Sync**:
-  - Cryptographically synchronized bidirectional clipboard via native `wl-clipboard` (`wl-copy` / `wl-paste`).
-- **🎵 MPRIS Media Controller**:
-  - Play/pause, track navigation, volume control, and metadata polling via `playerctl`.
-- **🔊 PipeWire Audio Control**:
-  - Instant sink volume attenuation and mute toggles via `wpctl`.
-- **✨ Ambient Terminal Visualizers**:
-  - Spawn matrix fluid visualizers (`lavat`) or bonsai trees (`cbonsai`) on your workstation right from your phone.
-- **🔐 Secure PIN Pairing**:
-  - KDE Connect-style 6-digit PIN desktop notification pairing with rate-limiting and persistent token authorization.
-- **🛡️ Sandboxed Systemd User Service**:
-  - Automatically runs on graphical login with strict path sandboxing.
+A zero-bloat, lightweight Linux host daemon and CLI bridge built for the **DeckComp Android companion app** 📱. Turn your phone into an interactive hardware control deck, clipboard bridge, and file drop utility over local Wi-Fi ⚡.
 
 ---
 
-## ⚡ Quick Start: One-Command Installation
+## ✨ Highlights
 
-You can install the entire DeckComp workflow with a single command:
+* 🚀 **Bidirectional File Drop:** Push files directly to `~/Downloads` on your PC, or send files to your phone via CLI (`deck-send`) or right-click file manager menus.
+* 📋 **Wayland Clipboard Sync:** Low-latency clipboard synchronization using native `wl-clipboard` (`wl-copy` / `wl-paste`).
+* 🎵 **Media & Audio Control:** Control MPRIS media via `playerctl` and PipeWire sink volume via `wpctl`.
+* 🔐 **Instant PIN Pairing:** Frictionless 6-digit desktop PIN verification with persistent token authorization.
+* 🛡️ **Systemd Native:** Runs as a sandboxed, low-overhead background `systemd --user` service.
+
+---
+
+## ⚡ Installation
+
+### 🚀 Quick Install (Automated)
+
+Run the install script to verify dependencies, configure the isolated environment, install CLI tools, set up file manager actions, and start the systemd service:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/deckcomp/deckcomp/main/install.sh | bash
+curl -fsSL [https://raw.githubusercontent.com/deckcomp/deckcomp/main/install.sh](https://raw.githubusercontent.com/deckcomp/deckcomp/main/install.sh) | bash
 ```
 
-Or if you have cloned the repository:
+<details>
+<summary>🛠️ Manual / Git Installation</summary>
 
 ```bash
-git clone https://github.com/deckcomp/deckcomp.git
+git clone [https://github.com/deckcomp/deckcomp.git](https://github.com/deckcomp/deckcomp.git)
 cd deckcomp
 ./install.sh
 ```
 
-### What the installer does automatically:
-1. Detects your distribution (Arch `pacman`, Debian/Ubuntu `apt`, or Fedora `dnf`) and verifies required system tools (`wl-clipboard`, `libnotify`, `playerctl`, `pipewire`).
-2. Installs the host daemon to `~/.local/share/deckcomp/` with an isolated Python virtual environment.
-3. Links the unified CLI `deckcomp` and quick-drop alias `deck-send` into `~/.local/bin/`.
-4. Installs file manager right-click integrations for KDE Dolphin and GNOME Nautilus.
-5. Installs, enables, and starts the background `deckcomp.service` via `systemctl --user`.
+**What the installer handles automatically:**
+1. 🔍 Checks dependencies (`wl-clipboard`, `libnotify`, `playerctl`, `pipewire`) across Arch, Fedora, and Debian/Ubuntu.
+2. 📦 Deploys the daemon to `~/.local/share/deckcomp/` in an isolated virtual environment.
+3. 🔗 Symlinks `deckcomp` and `deck-send` into `~/.local/bin/`.
+4. 📂 Adds right-click context menu actions to KDE Dolphin and GNOME Nautilus.
+5. ⚙️ Enables and starts the `deckcomp.service` user unit.
+
+</details>
+
+> 📦 *Arch Linux (AUR package) coming soon!*
 
 ---
 
-## 📦 Arch Linux (AUR) Installation
+## 📱 Quick Pairing
 
-For Arch Linux users, DeckComp includes native `PKGBUILD` and `.SRCINFO` specifications:
+1. 📥 Download the **DeckComp APK** from the [Releases](https://github.com/deckcomp/deckcomp/releases) page and install it.
+2. 📲 Launch **DeckComp** on your Android device and tap **Pair New PC**.
+3. 🔔 A desktop notification will pop up on your computer showing a **6-digit PIN**.
+4. 🔑 Enter the PIN on your phone to complete pairing.
 
-```bash
-# Using yay:
-yay -S deckcomp
-
-# Or using paru:
-paru -S deckcomp
-
-# Or building manually:
-cd companion-server
-makepkg -si
-```
-
-Enable and start the service:
-```bash
-systemctl --user enable --now deckcomp.service
-```
-
----
-
-## 📱 Mobile Pairing Guide
-
-1. Launch **DeckComp** on your Android phone.
-2. Tap **Pair New PC**.
-3. If your workstation is on the same local Wi-Fi, it will appear in auto-discovery. Tap your PC (or enter your PC's LAN IP).
-4. A desktop notification will pop up on your computer displaying a **6-digit pairing PIN**.
-5. Enter the PIN on your phone.
-6. **Done!** Your phone is now securely paired with persistent token authorization.
-
-> **Tip:** You can check host pairing endpoints and instructions anytime in terminal by running:
+> 💡 **Tip:** You can check host pairing endpoints and instructions anytime in terminal:
 > ```bash
 > deckcomp pair
 > ```
 
 ---
 
-## 💻 CLI Reference (`deckcomp`)
+## 💻 CLI Reference
 
-DeckComp includes a comprehensive workstation manager:
+DeckComp includes a unified command (`deckcomp`) and a quick-drop alias (`deck-send`).
+
+### 🎮 Core Commands
 
 | Command | Description |
 | :--- | :--- |
-| `deckcomp status` | Displays daemon health, local LAN endpoints, paired phones, and outbox count |
-| `deckcomp pair` | Displays local IP addresses and pairing walkthrough |
-| `deckcomp send <file>` | Stages a file on your PC for your phone to download (`deck-send` alias) |
-| `deckcomp outbox` | Lists files currently waiting in the host outbox |
-| `deckcomp outbox --clear` | Clears all staged files from the host outbox |
-| `deckcomp devices` | Lists all paired mobile devices and their IDs |
-| `deckcomp unpair <device_id>` | Revokes access for a specific paired phone |
-| `deckcomp doctor` | Runs self-diagnostics for Wayland, audio, and visualizer binaries |
-| `deckcomp start` | Starts the background systemd service |
-| `deckcomp stop` | Stops the background systemd service |
-| `deckcomp restart` | Restarts the background systemd service |
-| `deckcomp logs` | Follows real-time daemon logs via `journalctl` |
-| `deckcomp token` | Shows the host master authentication token |
+| `deckcomp status` | 📊 Show daemon health, local endpoints, and paired devices |
+| `deckcomp pair` | 🤝 Show local IP addresses and pairing helper |
+| `deck-send <file>` | 📤 Stage a file for download on your phone (`deckcomp send <file>`) |
+| `deckcomp doctor` | 🩺 Run system diagnostics for Wayland, audio, and visualizer tools |
+
+<details>
+<summary>⚙️ View Service & Device Management Commands</summary>
+
+### 📁 File & Device Management
+
+| Command | Description |
+| :--- | :--- |
+| `deckcomp outbox` | 📋 List staged files waiting for transfer |
+| `deckcomp outbox --clear` | 🧹 Clear all staged outbox files |
+| `deckcomp devices` | 📱 List paired device IDs |
+| `deckcomp unpair <id>` | 🚫 Revoke access for a paired device |
+| `deckcomp token` | 🔑 Print master authorization token |
+
+### 🔄 Systemd Controls
+
+| Command | Description |
+| :--- | :--- |
+| `deckcomp start` | ▶️ Start the background service |
+| `deckcomp stop` | ⏹️ Stop the background service |
+| `deckcomp restart` | 🔁 Restart the background service |
+| `deckcomp logs` | 📜 Tail daemon logs (`journalctl --user -u deckcomp -f`) |
+
+</details>
 
 ---
 
-## 📂 Desktop Context Menu (Right-Click File Drops)
+## 🔌 Integrations & Diagnostics
 
-DeckComp automatically integrates with popular Linux file managers:
+### 🖱️ Right-Click File Drops
 
-- **KDE Dolphin**: Right-click any file -> **DeckComp** -> **Send to Phone (DeckComp)**.
-- **GNOME Nautilus / Nemo / Caja**: Right-click any file -> **Scripts** -> **Send to Phone (DeckComp)**.
+DeckComp integrates natively with popular Linux file managers:
 
-Staged files immediately become available for download in the **File Drop** tab of your mobile app!
+* 🐬 **KDE Dolphin:** Right-click $\rightarrow$ **DeckComp** $\rightarrow$ **Send to Phone (DeckComp)**
+* 📁 **GNOME Nautilus / Nemo / Caja:** Right-click $\rightarrow$ **Scripts** $\rightarrow$ **Send to Phone (DeckComp)**
+
+Staged files show up instantly in the **File Drop** tab of your mobile app!
 
 ---
 
-## 🧪 Self-Diagnostics (`deckcomp doctor`)
+### 🧪 System Diagnostics (`deckcomp doctor`)
 
-Verify that your desktop environment is fully configured:
+Verify that your desktop environment and system utilities are ready:
 
 ```bash
 deckcomp doctor
 ```
 
-Example output:
-```
+```text
 ==> DeckComp Workstation Doctor Diagnostic
-
   [OK] Wayland Display Socket: wayland-0
   [OK] wl-copy / wl-paste     -> /usr/bin/wl-paste
   [OK] notify-send            -> /usr/bin/notify-send
   [OK] playerctl              -> /usr/bin/playerctl
   [OK] wpctl                  -> /usr/bin/wpctl
-  [OK] lavat                  -> /usr/bin/lavat
-  [OK] cbonsai                -> /usr/bin/cbonsai
-
-  [OK] Localhost Daemon: HTTP 200 OK (v1.0.0)
+  [OK] Localhost Daemon:      -> HTTP 200 OK (v1.0.0)
 ```
 
 ---
 
 ## 🗑️ Uninstallation
 
-To cleanly remove DeckComp:
+To remove DeckComp cleanly:
 
 ```bash
 ./uninstall.sh
 
-# Or to also purge pairing credentials and configurations:
+# To purge configuration files and pairing keys as well:
 ./uninstall.sh --purge
 ```
 
@@ -165,4 +151,4 @@ To cleanly remove DeckComp:
 
 ## 📄 License
 
-MIT License. See [LICENSE](LICENSE) for details.
+Distributed under the MIT License. See [LICENSE](LICENSE) for details.
