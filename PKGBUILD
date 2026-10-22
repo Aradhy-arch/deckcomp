@@ -57,6 +57,9 @@ package() {
     install -dm755 "$pkgdir/usr/share/kio/servicemenus"
     install -m644 desktop/deckcomp-send.desktop "$pkgdir/usr/share/kio/servicemenus/deckcomp-send.desktop"
 
+    install -dm755 "$pkgdir/usr/share/deckcomp"
+    install -m644 desktop/deckcomp-thunar.xml "$pkgdir/usr/share/deckcomp/deckcomp-thunar.xml"
+
     # 5. Install application icon
     install -dm755 "$pkgdir/usr/share/icons/hicolor/512x512/apps"
     install -m644 desktop/deckcomp.png "$pkgdir/usr/share/icons/hicolor/512x512/apps/deckcomp.png"
