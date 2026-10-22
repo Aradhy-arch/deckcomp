@@ -1,5 +1,4 @@
 import * as Battery from 'expo-battery';
-import * as Clipboard from 'expo-clipboard';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import { SlidersHorizontal, Sparkles, Terminal, Upload } from 'lucide-react-native';
@@ -7,13 +6,11 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   AppState,
   AppStateStatus,
-  BackHandler,
   RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
-  Vibration,
   View,
 } from 'react-native';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -33,7 +30,6 @@ import { TelemetryDeck } from './src/components/TelemetryDeck';
 import { ToastHUD } from './src/components/ToastHUD';
 import { Palette } from './src/constants/theme';
 import {
-  checkInitialNotificationResponse,
   initNotificationService,
   showPersistentNotification,
   updateNotificationFeedback,
@@ -89,12 +85,11 @@ function DeckCompMain() {
     isLowPower: false,
   });
 
-  // Action toast HUD feedback and auto-exit timer state
+  // Action toast HUD feedback
   const [toastHUD, setToastHUD] = useState<{ message: string; isError?: boolean } | null>(null);
   const autoDismissTimerRef = useRef<NodeJS.Timeout | null>(null);
-  const autoExitTimerRef = useRef<NodeJS.Timeout | null>(null);
 
-  const triggerToastHUD = useCallback((msg: string, isError = false, shouldAutoExit = false) => {
+  const triggerToastHUD = useCallback((msg: string, isError = false) => {
     setToastHUD({ message: msg, isError });
     if (autoDismissTimerRef.current) {
       clearTimeout(autoDismissTimerRef.current);
@@ -102,23 +97,6 @@ function DeckCompMain() {
     autoDismissTimerRef.current = setTimeout(() => {
       setToastHUD(null);
     }, 3200);
-
-    if (shouldAutoExit) {
-      if (autoExitTimerRef.current) {
-        clearTimeout(autoExitTimerRef.current);
-      }
-      // 1400ms delay provides ample time to view the brief success message before smoothly minimizing
-      autoExitTimerRef.current = setTimeout(() => {
-        BackHandler.exitApp();
-      }, 1400);
-    }
-  }, []);
-
-  const handleCancelAutoExit = useCallback(() => {
-    if (autoExitTimerRef.current) {
-      clearTimeout(autoExitTimerRef.current);
-      autoExitTimerRef.current = null;
-    }
   }, []);
 
   const isMountedRef = useRef(true);
@@ -157,23 +135,8 @@ function DeckCompMain() {
           setOnboardingVisible(true);
         }
 
-        // Initialize persistent silent notification listener
-        initNotificationService(
-          () => apiClientRef.current,
-          (actionId, result) => {
-            triggerToastHUD(result.message, !result.success, false);
-          }
-        );
-
-        // Check if the app was launched directly from tapping a notification quick action
-        checkInitialNotificationResponse(
-          () => apiClientRef.current,
-          {
-            onFeedback: (msg, isError) => {
-              triggerToastHUD(msg, isError, true); // true = auto-exit after displaying toast
-            },
-          }
-        );
+        // Initialize persistent silent notification listener (background only)
+        initNotificationService(() => apiClientRef.current);
       } catch {
         if (isMountedRef.current) {
           setHostAddressLoaded(true);
@@ -279,7 +242,6 @@ function DeckCompMain() {
       setNetworkStatus('online');
       setErrorMessage(null);
       showPersistentNotification(health.hostname || currentDevice.name);
-      autoSyncClipboard(false);
 
       // 2. Fetch Telemetry & Media independently
       const [telemetryRes, mediaRes] = await Promise.allSettled([
@@ -314,68 +276,15 @@ function DeckCompMain() {
     }
   }, [hostAddressLoaded, clientBattery]);
 
-  // Auto-clipboard sync state and helper (continuous phone -> PC sync)
-  const lastPushedClipRef = useRef<string>('');
-
-  const autoSyncClipboard = useCallback(async (showFeedback = true) => {
-    if (!apiClientRef.current) return;
-    try {
-      const text = await Clipboard.getStringAsync();
-      if (text && text.trim() && text !== lastPushedClipRef.current) {
-        lastPushedClipRef.current = text;
-        await apiClientRef.current.pushClipboard(text);
-        const preview = text.trim().slice(0, 24);
-        const suffix = text.trim().length > 24 ? '...' : '';
-        const msg = `✓ Synced to PC: "${preview}${suffix}"`;
-        if (showFeedback) {
-          triggerToastHUD(msg, false, false);
-        }
-        await updateNotificationFeedback(msg);
-      }
-    } catch {
-      // Auto-sync failure is non-blocking
-    }
-  }, [triggerToastHUD]);
-
-  // Setup auto-clipboard sync listener (Phone -> Laptop)
-  useEffect(() => {
-    let sub: { remove: () => void } | null = null;
-    try {
-      sub = Clipboard.addClipboardListener(async () => {
-        // Small delay so Android completes committing the clip
-        setTimeout(() => {
-          autoSyncClipboard(true);
-        }, 80);
-      });
-    } catch {}
-
-    return () => {
-      sub?.remove();
-    };
-  }, [autoSyncClipboard]);
-
   // Periodic polling management with 12s interval and AppState guard
   useEffect(() => {
     if (!hostAddressLoaded) return;
 
     fetchWorkstationData();
-    autoSyncClipboard(false);
 
     const handleAppStateChange = (nextAppState: AppStateStatus) => {
       if (nextAppState === 'active') {
         fetchWorkstationData();
-        // Check if resumed via notification action tap
-        checkInitialNotificationResponse(
-          () => apiClientRef.current,
-          {
-            onFeedback: (msg, isError) => {
-              triggerToastHUD(msg, isError, true);
-            },
-          }
-        );
-        setTimeout(() => {
-          autoSyncClipboard(true);
-        }, 150);
         if (!pollTimerRef.current) {
           pollTimerRef.current = setInterval(fetchWorkstationData, 12000);
         }
@@ -397,7 +306,7 @@ function DeckCompMain() {
         pollTimerRef.current = null;
       }
     };
-  }, [hostAddressLoaded, fetchWorkstationData, autoSyncClipboard, triggerToastHUD]);
+  }, [hostAddressLoaded, fetchWorkstationData]);
 
   // Manual pull-to-refresh: immediately re-reads phone battery and workstation metrics
   const handleRefresh = async () => {
@@ -428,7 +337,6 @@ function DeckCompMain() {
       // 2. Force refetch workstation data (bypass isPollingRef lock)
       isPollingRef.current = false;
       await fetchWorkstationData();
-      await autoSyncClipboard(true);
     } finally {
       if (isMountedRef.current) {
         setRefreshing(false);
@@ -491,10 +399,7 @@ function DeckCompMain() {
   };
 
   return (
-    <View
-      style={[styles.mainContainer, { paddingTop: insets.top }]}
-      onTouchStart={handleCancelAutoExit}
-    >
+    <View style={[styles.mainContainer, { paddingTop: insets.top }]}>
       <StatusBar style="light" />
 
       {/* Action / Sync Feedback Toast HUD */}

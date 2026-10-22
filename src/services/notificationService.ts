@@ -30,7 +30,8 @@ function getNotificationsModule(): typeof import('expo-notifications') | null {
 }
 
 /**
- * Executes a quick clipboard push or pull action with error handling and notification updates.
+ * Executes a quick clipboard push or pull action with error handling and silent notification updates.
+ * Runs completely in the background without opening the app.
  */
 export async function executeClipboardAction(
   actionId: string,
@@ -115,41 +116,6 @@ export async function executeClipboardAction(
   return { success: false, message: 'No action taken' };
 }
 
-/**
- * Checks if the app was launched or foregrounded via a notification response
- * (such as cold-start from tapping Push Clip / Pull Clip).
- */
-export async function checkInitialNotificationResponse(
-  clientProvider: () => ApiClient | null,
-  options?: {
-    onFeedback?: (msg: string, isError?: boolean) => void;
-  }
-): Promise<{ handled: boolean; actionId?: string; success?: boolean; message?: string }> {
-  const Notifications = getNotificationsModule();
-  if (!Notifications) return { handled: false };
-
-  try {
-    const response = await Notifications.getLastNotificationResponseAsync();
-    if (!response) return { handled: false };
-
-    const actionId = response.actionIdentifier;
-    if (actionId !== 'action_push_clip' && actionId !== 'action_pull_clip') {
-      return { handled: false };
-    }
-
-    const key = `${response.notification?.request?.identifier || ''}_${actionId}_${response.notification?.date || ''}`;
-    if (lastProcessedResponseKey === key) {
-      return { handled: false };
-    }
-    lastProcessedResponseKey = key;
-
-    const res = await executeClipboardAction(actionId, clientProvider(), options);
-    return { handled: true, actionId, success: res.success, message: res.message };
-  } catch {
-    return { handled: false };
-  }
-}
-
 export async function initNotificationService(
   apiClientProvider: () => ApiClient | null,
   onActionTriggered?: (actionId: string, result: { success: boolean; message: string }) => void
@@ -202,26 +168,26 @@ export async function initNotificationService(
       showBadge: false,
     });
 
-    // 3. Define Quick Action Buttons with opensAppToForeground: true
-    // Required on Android 10+ so the app gets window focus to read/write clipboard
+    // 3. Define Quick Action Buttons with opensAppToForeground: false
+    // Strictly background action: will NOT launch or open the application
     await Notifications.setNotificationCategoryAsync(CATEGORY_ID, [
       {
         identifier: 'action_pull_clip',
         buttonTitle: 'Pull Clip',
         options: {
-          opensAppToForeground: true,
+          opensAppToForeground: false,
         },
       },
       {
         identifier: 'action_push_clip',
         buttonTitle: 'Push Clip',
         options: {
-          opensAppToForeground: true,
+          opensAppToForeground: false,
         },
       },
     ]);
 
-    // 4. Handle button taps while app is already running
+    // 4. Handle button taps in background without opening the app
     Notifications.addNotificationResponseReceivedListener(async (response) => {
       const actionId = response.actionIdentifier;
       if (actionId !== 'action_push_clip' && actionId !== 'action_pull_clip') {
