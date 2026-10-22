@@ -26,7 +26,7 @@ optdepends=(
 )
 install=deckcomp.install
 source=("$pkgname-$pkgver.tar.gz::$url/archive/v$pkgver.tar.gz")
-sha256sums=('b641390a9a4800329470af104c65303044c5efd27a5c95f06f82b048fa1a2f20')
+sha256sums=('e7400c5c3ac030ea46382a239c862bf7da60ddb2f8ccf0d5866219d044dc9db7')
 
 package() {
     # If building locally from repo:
