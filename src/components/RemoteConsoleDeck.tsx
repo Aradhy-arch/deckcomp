@@ -1,5 +1,5 @@
 import { Play, Terminal, Trash } from 'lucide-react-native';
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   ScrollView,
@@ -11,7 +11,9 @@ import {
 } from 'react-native';
 import { ApiClient } from '../api/client';
 import { Palette } from '../constants/theme';
+import { getUserDistro } from '../storage/deviceStorage';
 import { ShellResult } from '../types';
+import { TerminalVisualizer } from './TerminalVisualizer';
 
 interface RemoteConsoleDeckProps {
   apiClient: ApiClient | null;
@@ -22,12 +24,55 @@ export const RemoteConsoleDeck: React.FC<RemoteConsoleDeckProps> = ({ apiClient 
   const [running, setRunning] = useState(false);
   const [history, setHistory] = useState<{ cmd: string; res: ShellResult }[]>([]);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [activeVisualizer, setActiveVisualizer] = useState<'lavat' | 'cmatrix' | null>(null);
+  const [distro, setDistro] = useState('Linux');
 
-  const presets = ['uptime -p', 'free -h', 'uname -r', 'hyprctl activewindow -j'];
+  const presets = ['lavat', 'cmatrix', 'uptime -p', 'free -h', 'uname -r', 'hyprctl activewindow -j'];
+
+  useEffect(() => {
+    getUserDistro().then((d) => {
+      if (d) setDistro(d);
+    });
+  }, []);
 
   const handleExecute = async (cmdToRun?: string) => {
     const targetCmd = (cmdToRun || command).trim();
-    if (!targetCmd || !apiClient) return;
+    if (!targetCmd) return;
+
+    if (targetCmd === 'clear') {
+      setHistory([]);
+      setActiveVisualizer(null);
+      if (!cmdToRun) setCommand('');
+      return;
+    }
+
+    const lower = targetCmd.toLowerCase();
+    if (lower === 'lavat' || lower.startsWith('lavat ')) {
+      setActiveVisualizer('lavat');
+      if (!cmdToRun) setCommand('');
+      // Also spawn on workstation in background if available
+      if (apiClient) {
+        apiClient.spawnAmbient('lavat').catch(() => {
+          apiClient.executeShell('( kitty -e lavat & ) || ( alacritty -e lavat & ) || ( foot -e lavat & ) || ( lavat & )', 5).catch(() => {});
+        });
+      }
+      return;
+    }
+
+    if (lower === 'cmatrix' || lower.startsWith('cmatrix ') || lower === 'matrix') {
+      setActiveVisualizer('cmatrix');
+      if (!cmdToRun) setCommand('');
+      // Also spawn on workstation in background if available
+      if (apiClient) {
+        apiClient.executeShell('( kitty -e cmatrix & ) || ( alacritty -e cmatrix & ) || ( foot -e cmatrix & ) || ( cmatrix & )', 5).catch(() => {});
+      }
+      return;
+    }
+
+    if (!apiClient) {
+      setErrorMsg('Workstation offline - connect in Controls tab to run bash commands');
+      return;
+    }
 
     setRunning(true);
     setErrorMsg(null);
@@ -110,7 +155,7 @@ export const RemoteConsoleDeck: React.FC<RemoteConsoleDeckProps> = ({ apiClient 
             </View>
             <View style={styles.terminalTitleRow}>
               <Terminal size={12} color={Palette.subtext0} style={styles.titleIcon} />
-              <Text style={styles.terminalHeaderTitle}>ARCH LINUX TERMINAL</Text>
+              <Text style={styles.terminalHeaderTitle}>{(distro || 'LINUX').toUpperCase()} TERMINAL</Text>
             </View>
           </View>
           {history.length > 0 && (
@@ -126,7 +171,30 @@ export const RemoteConsoleDeck: React.FC<RemoteConsoleDeckProps> = ({ apiClient 
         </View>
 
         <ScrollView style={styles.terminalBuffer} nestedScrollEnabled>
-          {history.length === 0 ? (
+          {activeVisualizer && (
+            <TerminalVisualizer
+              app={activeVisualizer}
+              onClose={() => {
+                const stopped = activeVisualizer;
+                setActiveVisualizer(null);
+                setHistory((prev) => [
+                  {
+                    cmd: stopped,
+                    res: {
+                      stdout: `[${stopped}: animation terminated by SIGINT / Ctrl+C]`,
+                      stderr: '',
+                      exit_code: 0,
+                      duration_ms: 180,
+                      timed_out: false,
+                    },
+                  },
+                  ...prev.slice(0, 9),
+                ]);
+              }}
+            />
+          )}
+
+          {history.length === 0 && !activeVisualizer ? (
             <Text style={styles.emptyPrompt}>Ready. Tap a preset chip or type a command above.</Text>
           ) : (
             history.map((item, idx) => (
