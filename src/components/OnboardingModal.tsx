@@ -39,15 +39,21 @@ import {
 } from '../storage/deviceStorage';
 import { DeviceConfig, DiscoveredHost } from '../types';
 
-const POPULAR_DISTROS = [
-  'Arch Linux',
-  'Fedora',
-  'Ubuntu',
-  'Debian',
-  'NixOS',
-  'Void Linux',
-  'openSUSE',
-  'Gentoo',
+interface DistroPreset {
+  name: string;
+  pkg: string;
+  tag: string;
+}
+
+const DISTRO_PRESETS: DistroPreset[] = [
+  { name: 'Arch Linux', pkg: 'pacman', tag: 'rolling' },
+  { name: 'Fedora', pkg: 'dnf', tag: 'wayland' },
+  { name: 'NixOS', pkg: 'nix', tag: 'declarative' },
+  { name: 'Void Linux', pkg: 'xbps', tag: 'runit' },
+  { name: 'Debian', pkg: 'apt', tag: 'stable' },
+  { name: 'Gentoo', pkg: 'portage', tag: 'source' },
+  { name: 'openSUSE', pkg: 'zypper', tag: 'tumbleweed' },
+  { name: 'Ubuntu', pkg: 'apt', tag: 'lts' },
 ];
 
 interface OnboardingModalProps {
@@ -318,74 +324,137 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({ visible, onCom
             ]}
             showsVerticalScrollIndicator={false}
           >
-            <View style={styles.stepHeader}>
-              <View style={styles.distroHeaderIconCircle}>
-                <Terminal size={24} color={Palette.mauve} />
+            {/* Terminal Window Header */}
+            <View style={styles.termWindow}>
+              <View style={styles.termTitlebar}>
+                <View style={styles.termDots}>
+                  <View style={[styles.termDot, { backgroundColor: Palette.red }]} />
+                  <View style={[styles.termDot, { backgroundColor: Palette.yellow }]} />
+                  <View style={[styles.termDot, { backgroundColor: Palette.green }]} />
+                </View>
+                <Text style={styles.termTitleText}>deckcomp@workstation:~</Text>
+                <View style={{ width: 42 }} />
               </View>
-              <Text style={styles.stepTitle}>Select Your Distribution</Text>
-              <Text style={styles.stepDesc}>
-                DeckComp is tailor-made for Linux workstations on Wayland. Tell us what distro powers your setup:
-              </Text>
+
+              <View style={styles.termBody}>
+                <View style={styles.cliPromptRow}>
+                  <Text style={styles.cliPromptSymbol}>❯</Text>
+                  <Text style={styles.cliPromptCmd}>select-host-distro --target-env</Text>
+                </View>
+                <Text style={styles.cliNoticeText}>
+                  Select your desktop distribution to tune daemon IPC &amp; native desktop integrations.
+                </Text>
+              </View>
             </View>
 
-            <Text style={styles.scanLabel}>POPULAR DISTRIBUTIONS</Text>
-            <View style={styles.distroChipsGrid}>
-              {POPULAR_DISTROS.map((d) => {
+            {/* Distro Preset Grid */}
+            <View style={styles.sectionHeaderRow}>
+              <Text style={styles.sectionMonoLabel}>// DETECTED PRESETS</Text>
+              <Text style={styles.sectionSubLabel}>8 targets</Text>
+            </View>
+
+            <View style={styles.distroGrid}>
+              {DISTRO_PRESETS.map((item) => {
                 const isSelected =
-                  distro.toLowerCase() === d.toLowerCase() ||
-                  customDistroInput.toLowerCase() === d.toLowerCase();
+                  (distro.toLowerCase() === item.name.toLowerCase() &&
+                    !customDistroInput) ||
+                  customDistroInput.toLowerCase() === item.name.toLowerCase();
                 return (
                   <TouchableOpacity
-                    key={d}
-                    style={[styles.distroChip, isSelected && styles.activeDistroChip]}
-                    onPress={() => handleSelectChip(d)}
+                    key={item.name}
+                    style={[styles.distroTile, isSelected && styles.distroTileActive]}
+                    onPress={() => handleSelectChip(item.name)}
                     activeOpacity={0.7}
                   >
-                    <Text
-                      style={[
-                        styles.distroChipText,
-                        isSelected && styles.activeDistroChipText,
-                      ]}
-                    >
-                      {d}
-                    </Text>
-                    {isSelected && (
-                      <Check size={14} color={Palette.mauve} style={{ marginLeft: 6 }} />
-                    )}
+                    <View style={styles.distroTileTop}>
+                      <Text
+                        style={[
+                          styles.distroTileName,
+                          isSelected && styles.distroTileNameActive,
+                        ]}
+                        numberOfLines={1}
+                      >
+                        {item.name}
+                      </Text>
+                      {isSelected ? (
+                        <View style={styles.activeDotOuter}>
+                          <View style={styles.activeDotInner} />
+                        </View>
+                      ) : (
+                        <View style={styles.inactiveDot} />
+                      )}
+                    </View>
+                    <View style={styles.distroMetaRow}>
+                      <View
+                        style={[
+                          styles.distroPkgBadge,
+                          isSelected && styles.distroPkgBadgeActive,
+                        ]}
+                      >
+                        <Text
+                          style={[
+                            styles.distroPkgText,
+                            isSelected && styles.distroPkgTextActive,
+                          ]}
+                        >
+                          {item.pkg}
+                        </Text>
+                      </View>
+                      <Text
+                        style={[
+                          styles.distroTagText,
+                          isSelected && styles.distroTagTextActive,
+                        ]}
+                      >
+                        {item.tag}
+                      </Text>
+                    </View>
                   </TouchableOpacity>
                 );
               })}
             </View>
 
-            <Text style={[styles.scanLabel, { marginTop: 18 }]}>
-              OR SPECIFY YOUR DISTRO MANUALLY
-            </Text>
-            <TextInput
-              style={styles.manualInput}
-              value={customDistroInput}
-              onChangeText={handleDistroInputChange}
-              placeholder="e.g. Arch Linux, Fedora, Debian, Void..."
-              placeholderTextColor={Palette.overlay0}
-              autoCapitalize="words"
-            />
+            {/* Custom Distro Input Card */}
+            <View style={styles.customDistroCard}>
+              <View style={styles.customDistroHeader}>
+                <Text style={styles.customDistroLabel}>CUSTOM / OTHER DISTRO</Text>
+                <Text style={styles.customDistroFlag}>--manual</Text>
+              </View>
+              <View style={styles.cliInputRow}>
+                <Text style={styles.cliInputPrompt}>$ DISTRO=</Text>
+                <TextInput
+                  style={styles.cliTextInput}
+                  value={customDistroInput}
+                  onChangeText={handleDistroInputChange}
+                  placeholder={`"${distro || 'Arch Linux'}"`}
+                  placeholderTextColor={Palette.surface2}
+                  autoCapitalize="words"
+                  autoCorrect={false}
+                />
+              </View>
+            </View>
 
+            {/* Continue Execution Button */}
             <TouchableOpacity
-              style={styles.actionBtn}
+              style={styles.termActionBtn}
               onPress={handleProceedToPairing}
-              activeOpacity={0.7}
+              activeOpacity={0.8}
             >
-              <Text style={styles.actionBtnText}>
-                Continue: Find My {distro || 'Linux'} Host
-              </Text>
+              <View style={styles.termActionBtnContent}>
+                <Text style={styles.termActionBtnPrompt}>❯</Text>
+                <Text style={styles.termActionBtnText} numberOfLines={1}>
+                  deckcomp connect --distro "{(customDistroInput.trim() || distro || 'Linux')}"
+                </Text>
+              </View>
               <ChevronRight size={18} color={Palette.crust} />
             </TouchableOpacity>
 
             <TouchableOpacity
-              style={styles.skipBtn}
+              style={styles.termBackBtn}
               onPress={() => setCurrentStep('welcome')}
               activeOpacity={0.7}
             >
-              <Text style={styles.skipBtnText}>Back to Welcome</Text>
+              <Text style={styles.termBackBtnText}>cd .. (back to welcome)</Text>
             </TouchableOpacity>
           </ScrollView>
         )}
@@ -948,46 +1017,261 @@ const styles = StyleSheet.create({
     marginTop: 2,
     lineHeight: 15,
   },
-  distroHeaderIconCircle: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: Palette.surface0,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 12,
+  termWindow: {
+    backgroundColor: Palette.mantle,
+    borderRadius: 14,
     borderWidth: 1,
     borderColor: Palette.surface1,
+    overflow: 'hidden',
+    marginBottom: 18,
   },
-  distroChipsGrid: {
+  termTitlebar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: Palette.crust,
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+    borderBottomWidth: 1,
+    borderBottomColor: Palette.surface0,
+  },
+  termDots: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    width: 48,
+  },
+  termDot: {
+    width: 9,
+    height: 9,
+    borderRadius: 4.5,
+  },
+  termTitleText: {
+    fontSize: 11,
+    fontFamily: 'monospace',
+    color: Palette.subtext0,
+    fontWeight: '600',
+  },
+  termBody: {
+    padding: 14,
+  },
+  cliPromptRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 6,
+  },
+  cliPromptSymbol: {
+    fontSize: 14,
+    fontWeight: '900',
+    color: Palette.mauve,
+    fontFamily: 'monospace',
+  },
+  cliPromptCmd: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: Palette.text,
+    fontFamily: 'monospace',
+  },
+  cliNoticeText: {
+    fontSize: 12,
+    color: Palette.subtext0,
+    lineHeight: 17,
+  },
+  sectionHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  sectionMonoLabel: {
+    fontSize: 11,
+    fontFamily: 'monospace',
+    fontWeight: '700',
+    color: Palette.overlay1,
+    letterSpacing: 0.5,
+  },
+  sectionSubLabel: {
+    fontSize: 10,
+    fontFamily: 'monospace',
+    color: Palette.overlay0,
+  },
+  distroGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 8,
-    marginTop: 8,
-    marginBottom: 12,
+    gap: 10,
+    marginBottom: 16,
   },
-  distroChip: {
+  distroTile: {
+    width: '48.5%',
+    backgroundColor: Palette.mantle,
+    borderRadius: 12,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: Palette.surface0,
+  },
+  distroTileActive: {
+    backgroundColor: Palette.surface0,
+    borderColor: Palette.mauve,
+    borderWidth: 1.5,
+  },
+  distroTileTop: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: Palette.mantle,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderRadius: 12,
+    justifyContent: 'space-between',
+    marginBottom: 8,
+  },
+  distroTileName: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: Palette.subtext1,
+    flex: 1,
+  },
+  distroTileNameActive: {
+    color: Palette.text,
+    fontWeight: '800',
+  },
+  activeDotOuter: {
+    width: 14,
+    height: 14,
+    borderRadius: 7,
+    backgroundColor: 'rgba(203, 166, 247, 0.25)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  activeDotInner: {
+    width: 7,
+    height: 7,
+    borderRadius: 3.5,
+    backgroundColor: Palette.mauve,
+  },
+  inactiveDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 3.5,
+    backgroundColor: Palette.surface2,
+  },
+  distroMetaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  distroPkgBadge: {
+    backgroundColor: Palette.crust,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
     borderWidth: 1,
     borderColor: Palette.surface1,
   },
-  activeDistroChip: {
-    backgroundColor: Palette.surface1,
+  distroPkgBadgeActive: {
     borderColor: Palette.mauve,
+    backgroundColor: Palette.crust,
   },
-  distroChipText: {
-    fontSize: 13,
-    fontWeight: '600',
+  distroPkgText: {
+    fontSize: 10,
+    fontFamily: 'monospace',
+    color: Palette.subtext0,
+    fontWeight: '700',
+  },
+  distroPkgTextActive: {
+    color: Palette.mauve,
+  },
+  distroTagText: {
+    fontSize: 10,
+    fontFamily: 'monospace',
+    color: Palette.overlay0,
+  },
+  distroTagTextActive: {
     color: Palette.subtext1,
   },
-  activeDistroChipText: {
-    color: Palette.mauve,
+  customDistroCard: {
+    backgroundColor: Palette.mantle,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: Palette.surface0,
+    padding: 12,
+    marginBottom: 18,
+  },
+  customDistroHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  customDistroLabel: {
+    fontSize: 11,
+    fontFamily: 'monospace',
     fontWeight: '700',
+    color: Palette.overlay1,
+    letterSpacing: 0.5,
+  },
+  customDistroFlag: {
+    fontSize: 10,
+    fontFamily: 'monospace',
+    color: Palette.overlay0,
+  },
+  cliInputRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: Palette.crust,
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    borderWidth: 1,
+    borderColor: Palette.surface1,
+  },
+  cliInputPrompt: {
+    fontSize: 12,
+    fontFamily: 'monospace',
+    fontWeight: '700',
+    color: Palette.mauve,
+    marginRight: 6,
+  },
+  cliTextInput: {
+    flex: 1,
+    fontSize: 13,
+    fontFamily: 'monospace',
+    color: Palette.text,
+    paddingVertical: 10,
+  },
+  termActionBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: Palette.mauve,
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    marginTop: 4,
+  },
+  termActionBtnContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    flex: 1,
+  },
+  termActionBtnPrompt: {
+    fontSize: 14,
+    fontWeight: '900',
+    color: Palette.crust,
+    fontFamily: 'monospace',
+  },
+  termActionBtnText: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: Palette.crust,
+    fontFamily: 'monospace',
+    flex: 1,
+  },
+  termBackBtn: {
+    alignItems: 'center',
+    paddingVertical: 14,
+    marginTop: 4,
+  },
+  termBackBtnText: {
+    fontSize: 12,
+    fontFamily: 'monospace',
+    color: Palette.overlay0,
   },
   easterEggBackdrop: {
     flex: 1,
