@@ -158,7 +158,7 @@ def cmd_status(args):
 
 
 def cmd_send(args):
-    """Stages a file on Arch host for mobile phone download."""
+    """Stages a file on Linux host for mobile phone download."""
     if not args.file:
         print("Error: No file specified. Usage: deckcomp send <path-to-file>", file=sys.stderr)
         sys.exit(1)
@@ -351,7 +351,7 @@ def cmd_doctor(args):
 def main():
     parser = argparse.ArgumentParser(
         prog="deckcomp",
-        description="DeckComp: Zero-bloat Arch Linux companion daemon and workflow controller."
+        description="DeckComp: Zero-bloat Linux companion daemon and workflow controller."
     )
     subparsers = parser.add_subparsers(dest="command", help="Available commands")
 

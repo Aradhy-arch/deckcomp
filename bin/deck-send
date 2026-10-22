@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-DeckComp CLI tool: Stage file(s) on Arch host for mobile phone download.
+DeckComp CLI tool: Stage file(s) on Linux host for mobile phone download.
 Usage: deck-send <file_path> [file_path ...]
 """
 import json
@@ -89,7 +89,7 @@ def stage_single_file(target_path: Path, token: str) -> bool:
 def main():
     if len(sys.argv) < 2 or sys.argv[1] in ("-h", "--help"):
         print("Usage: deck-send <path-to-file> [more-files...]")
-        print("Stages files on your Arch Linux host for your connected DeckComp phone.")
+        print("Stages files on your Linux host for your connected DeckComp phone.")
         sys.exit(0)
 
     token = get_auth_token()
