@@ -1,6 +1,6 @@
 import * as Clipboard from 'expo-clipboard';
 import Constants, { ExecutionEnvironment } from 'expo-constants';
-import { Platform } from 'react-native';
+import { Platform, Vibration } from 'react-native';
 import { ApiClient } from '../api/client';
 import { getActiveDeviceId, loadDevices } from '../storage/deviceStorage';
 
@@ -16,6 +16,7 @@ const isExpoGo =
 let isInitialized = false;
 let currentHostname = 'Linux PC';
 let feedbackResetTimer: NodeJS.Timeout | null = null;
+let lastProcessedResponseKey = '';
 
 // Lazy-load expo-notifications only in native standalone builds (never in Expo Go)
 function getNotificationsModule(): typeof import('expo-notifications') | null {
@@ -28,7 +29,131 @@ function getNotificationsModule(): typeof import('expo-notifications') | null {
   }
 }
 
-export async function initNotificationService(apiClientProvider: () => ApiClient | null) {
+/**
+ * Executes a quick clipboard push or pull action with error handling and notification updates.
+ */
+export async function executeClipboardAction(
+  actionId: string,
+  client: ApiClient | null,
+  options?: {
+    onFeedback?: (msg: string, isError?: boolean) => void;
+  }
+): Promise<{ success: boolean; message: string }> {
+  if (actionId !== 'action_push_clip' && actionId !== 'action_pull_clip') {
+    return { success: false, message: 'Unknown action' };
+  }
+
+  let activeClient = client;
+  if (!activeClient) {
+    try {
+      const devList = await loadDevices();
+      const activeId = await getActiveDeviceId();
+      const activeDev = devList.find((d) => d.id === activeId) || devList[0];
+      if (activeDev && activeDev.hostIp) {
+        activeClient = new ApiClient({
+          hostIp: activeDev.hostIp,
+          hostPort: activeDev.hostPort,
+          authToken: activeDev.authToken,
+        });
+      }
+    } catch {}
+  }
+
+  if (!activeClient) {
+    const msg = '⚠ No workstation configured';
+    await updateNotificationFeedback(msg);
+    options?.onFeedback?.(msg, true);
+    return { success: false, message: msg };
+  }
+
+  try {
+    if (actionId === 'action_push_clip') {
+      const text = await Clipboard.getStringAsync();
+      if (!text || !text.trim()) {
+        const msg = '⚠ Phone clipboard is empty';
+        await updateNotificationFeedback(msg);
+        options?.onFeedback?.(msg, true);
+        return { success: false, message: msg };
+      }
+      await activeClient.pushClipboard(text);
+      try {
+        Vibration.vibrate(40);
+      } catch {}
+      const preview = text.trim().slice(0, 24);
+      const suffix = text.trim().length > 24 ? '...' : '';
+      const msg = `✓ Pushed to PC: "${preview}${suffix}"`;
+      await updateNotificationFeedback(msg);
+      options?.onFeedback?.(msg, false);
+      return { success: true, message: msg };
+    } else if (actionId === 'action_pull_clip') {
+      const remoteClip = await activeClient.getClipboard();
+      if (!remoteClip || !remoteClip.content || !remoteClip.content.trim()) {
+        const msg = '⚠ PC clipboard is empty';
+        await updateNotificationFeedback(msg);
+        options?.onFeedback?.(msg, true);
+        return { success: false, message: msg };
+      }
+      await Clipboard.setStringAsync(remoteClip.content);
+      try {
+        Vibration.vibrate(40);
+      } catch {}
+      const preview = remoteClip.content.trim().slice(0, 24);
+      const suffix = remoteClip.content.trim().length > 24 ? '...' : '';
+      const msg = `✓ Pulled from PC: "${preview}${suffix}"`;
+      await updateNotificationFeedback(msg);
+      options?.onFeedback?.(msg, false);
+      return { success: true, message: msg };
+    }
+  } catch (err: unknown) {
+    const errText = err instanceof Error ? err.message : 'Sync failed';
+    const msg = `⚠ Clipboard sync failed: ${errText}`;
+    await updateNotificationFeedback(msg);
+    options?.onFeedback?.(msg, true);
+    return { success: false, message: msg };
+  }
+
+  return { success: false, message: 'No action taken' };
+}
+
+/**
+ * Checks if the app was launched or foregrounded via a notification response
+ * (such as cold-start from tapping Push Clip / Pull Clip).
+ */
+export async function checkInitialNotificationResponse(
+  clientProvider: () => ApiClient | null,
+  options?: {
+    onFeedback?: (msg: string, isError?: boolean) => void;
+  }
+): Promise<{ handled: boolean; actionId?: string; success?: boolean; message?: string }> {
+  const Notifications = getNotificationsModule();
+  if (!Notifications) return { handled: false };
+
+  try {
+    const response = await Notifications.getLastNotificationResponseAsync();
+    if (!response) return { handled: false };
+
+    const actionId = response.actionIdentifier;
+    if (actionId !== 'action_push_clip' && actionId !== 'action_pull_clip') {
+      return { handled: false };
+    }
+
+    const key = `${response.notification?.request?.identifier || ''}_${actionId}_${response.notification?.date || ''}`;
+    if (lastProcessedResponseKey === key) {
+      return { handled: false };
+    }
+    lastProcessedResponseKey = key;
+
+    const res = await executeClipboardAction(actionId, clientProvider(), options);
+    return { handled: true, actionId, success: res.success, message: res.message };
+  } catch {
+    return { handled: false };
+  }
+}
+
+export async function initNotificationService(
+  apiClientProvider: () => ApiClient | null,
+  onActionTriggered?: (actionId: string, result: { success: boolean; message: string }) => void
+) {
   if (Platform.OS !== 'android' || isExpoGo) return;
   if (isInitialized) return;
   isInitialized = true;
@@ -77,83 +202,51 @@ export async function initNotificationService(apiClientProvider: () => ApiClient
       showBadge: false,
     });
 
-    // 3. Define Quick Action Buttons with opensAppToForeground: false
-    // Tapping these buttons executes the action entirely in the background without launching the app
+    // 3. Define Quick Action Buttons with opensAppToForeground: true
+    // Required on Android 10+ so the app gets window focus to read/write clipboard
     await Notifications.setNotificationCategoryAsync(CATEGORY_ID, [
       {
         identifier: 'action_pull_clip',
         buttonTitle: 'Pull Clip',
         options: {
-          opensAppToForeground: false,
+          opensAppToForeground: true,
         },
       },
       {
         identifier: 'action_push_clip',
         buttonTitle: 'Push Clip',
         options: {
-          opensAppToForeground: false,
+          opensAppToForeground: true,
         },
       },
     ]);
 
-    // 4. Handle button taps in the background directly
+    // 4. Handle button taps while app is already running
     Notifications.addNotificationResponseReceivedListener(async (response) => {
       const actionId = response.actionIdentifier;
       if (actionId !== 'action_push_clip' && actionId !== 'action_pull_clip') {
         return;
       }
 
-      let client = apiClientProvider();
-      if (!client) {
-        // Fallback: recover active client from local storage
-        try {
-          const devList = await loadDevices();
-          const activeId = await getActiveDeviceId();
-          const activeDev = devList.find((d) => d.id === activeId) || devList[0];
-          if (activeDev && activeDev.hostIp) {
-            client = new ApiClient({
-              hostIp: activeDev.hostIp,
-              hostPort: activeDev.hostPort,
-              authToken: activeDev.authToken,
-            });
-          }
-        } catch {}
+      const key = `${response.notification?.request?.identifier || ''}_${actionId}_${response.notification?.date || ''}`;
+      if (lastProcessedResponseKey === key) {
+        return;
       }
+      lastProcessedResponseKey = key;
 
-      if (!client) return;
-
-      try {
-        if (actionId === 'action_push_clip') {
-          const text = await Clipboard.getStringAsync();
-          if (text && text.trim()) {
-            await client.pushClipboard(text);
-            const preview = text.trim().slice(0, 24);
-            const suffix = text.trim().length > 24 ? '...' : '';
-            await updateNotificationFeedback(`✓ Pushed to PC: "${preview}${suffix}"`);
-          } else {
-            await updateNotificationFeedback('⚠ Phone clipboard is empty');
-          }
-        } else if (actionId === 'action_pull_clip') {
-          const remoteClip = await client.getClipboard();
-          if (remoteClip && remoteClip.content && remoteClip.content.trim()) {
-            await Clipboard.setStringAsync(remoteClip.content);
-            const preview = remoteClip.content.trim().slice(0, 24);
-            const suffix = remoteClip.content.trim().length > 24 ? '...' : '';
-            await updateNotificationFeedback(`✓ Pulled from PC: "${preview}${suffix}"`);
-          } else {
-            await updateNotificationFeedback('⚠ PC clipboard is empty');
-          }
-        }
-      } catch (err) {
-        await updateNotificationFeedback('⚠ Clipboard sync failed');
-      }
+      const result = await executeClipboardAction(actionId, apiClientProvider(), {
+        onFeedback: (msg, isError) => {
+          onActionTriggered?.(actionId, { success: !isError, message: msg });
+        },
+      });
+      onActionTriggered?.(actionId, { success: result.success, message: result.message });
     });
   } catch (err) {
     console.warn('[NotificationService] Initialization skipped:', err);
   }
 }
 
-async function updateNotificationFeedback(feedbackMsg: string) {
+export async function updateNotificationFeedback(feedbackMsg: string) {
   const Notifications = getNotificationsModule();
   if (!Notifications) return;
 

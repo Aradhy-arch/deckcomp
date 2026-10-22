@@ -15,6 +15,7 @@ import {
 } from 'react-native';
 import { ApiClient } from '../api/client';
 import { Palette } from '../constants/theme';
+import { updateNotificationFeedback } from '../services/notificationService';
 import { ConfirmModal } from './ConfirmModal';
 
 interface QuickActionsDeckProps {
@@ -42,7 +43,10 @@ export const QuickActionsDeck: React.FC<QuickActionsDeckProps> = ({ apiClient })
         return;
       }
       await apiClient.pushClipboard(text);
+      const preview = text.trim().slice(0, 24);
+      const suffix = text.trim().length > 24 ? '...' : '';
       triggerFeedback(`Copied to desktop (${text.length} chars)`);
+      updateNotificationFeedback(`✓ Pushed to PC: "${preview}${suffix}"`);
     } catch (err: unknown) {
       triggerFeedback(err instanceof Error ? err.message : 'Push failed');
     } finally {
@@ -60,7 +64,10 @@ export const QuickActionsDeck: React.FC<QuickActionsDeckProps> = ({ apiClient })
         return;
       }
       await Clipboard.setStringAsync(data.content);
+      const preview = data.content.trim().slice(0, 24);
+      const suffix = data.content.trim().length > 24 ? '...' : '';
       triggerFeedback(`Saved ${data.length} chars to phone`);
+      updateNotificationFeedback(`✓ Pulled from PC: "${preview}${suffix}"`);
     } catch (err: unknown) {
       triggerFeedback(err instanceof Error ? err.message : 'Pull failed');
     } finally {
