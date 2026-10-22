@@ -21,6 +21,6 @@ pkgbase = deckcomp
 	optdepends = dolphin: For KDE Dolphin file-manager right-click send action
 	optdepends = thunar: For XFCE Thunar file-manager right-click send action
 	source = deckcomp-1.0.0.tar.gz::https://github.com/Aradhy-arch/deckcomp/archive/v1.0.0.tar.gz
-	sha256sums = e7400c5c3ac030ea46382a239c862bf7da60ddb2f8ccf0d5866219d044dc9db7
+	sha256sums = 6bb7382730af4cb3c3faa04645f52106e92c62d8920acf667429ca83ea967e9d
 
 pkgname = deckcomp
