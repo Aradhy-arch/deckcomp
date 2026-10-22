@@ -34,7 +34,7 @@ export const PairingModal: React.FC<PairingModalProps> = ({
   visible,
   onClose,
   onPairSuccess,
-  initialIp = '192.168.31.30',
+  initialIp = '',
 }) => {
   const [step, setStep] = useState<'discover' | 'code'>('discover');
   const [ip, setIp] = useState(initialIp);
@@ -62,23 +62,25 @@ export const PairingModal: React.FC<PairingModalProps> = ({
     setScanning(true);
     setErrorMsg(null);
     try {
-      // 1. Direct probe for default IP
-      const direct = await ApiClient.scanHost(ip, parseInt(port, 10) || 8088);
       const hosts: DiscoveredHost[] = [];
-      if (direct) {
-        hosts.push(direct);
+      const activePort = parseInt(port, 10) || 8088;
+      if (ip && ip.trim()) {
+        const direct = await ApiClient.scanHost(ip.trim(), activePort);
+        if (direct) {
+          hosts.push(direct);
+        }
       }
 
-      // 2. Discover local subnet
-      const subnetBase = ip.split('.').slice(0, 3).join('.');
-      const found = await ApiClient.discoverSubnet(subnetBase, parseInt(port, 10) || 8088);
+      // Discover local subnet
+      const subnetBase = ip && ip.includes('.') ? ip.trim().split('.').slice(0, 3).join('.') : undefined;
+      const found = await ApiClient.discoverSubnet(subnetBase, activePort);
       for (const h of found) {
         if (!hosts.some((existing) => existing.ip === h.ip)) {
           hosts.push(h);
         }
       }
       setDiscoveredHosts(hosts);
-      if (hosts.length > 0 && !hosts.some((h) => h.ip === ip)) {
+      if (hosts.length > 0 && !ip) {
         setIp(hosts[0].ip);
       }
     } catch {
@@ -245,7 +247,7 @@ export const PairingModal: React.FC<PairingModalProps> = ({
                   setIp(val);
                   setErrorMsg(null);
                 }}
-                placeholder="192.168.31.30"
+                placeholder="e.g. 192.168.1.50"
                 placeholderTextColor={Palette.overlay0}
                 autoCapitalize="none"
               />

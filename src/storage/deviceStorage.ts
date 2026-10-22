@@ -7,9 +7,9 @@ const STORAGE_KEY_DEVICE_UUID = '@deck_local_device_uuid';
 const STORAGE_KEY_ONBOARDING_DONE = '@deck_onboarding_completed_v1';
 
 export const DEFAULT_DEVICE: DeviceConfig = {
-  id: 'dev_192.168.31.30_8088',
-  name: 'Arch Linux Workstation',
-  hostIp: '192.168.31.30',
+  id: 'default_workstation',
+  name: 'Linux Workstation',
+  hostIp: '',
   hostPort: 8088,
   isPaired: false,
   lastConnected: new Date().toISOString(),
@@ -19,7 +19,6 @@ export async function loadDevices(): Promise<DeviceConfig[]> {
   try {
     const raw = await AsyncStorage.getItem(STORAGE_KEY_DEVICES);
     if (!raw) {
-      await saveDevices([DEFAULT_DEVICE]);
       return [DEFAULT_DEVICE];
     }
     const parsed = JSON.parse(raw);

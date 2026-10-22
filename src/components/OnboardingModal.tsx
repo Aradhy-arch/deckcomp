@@ -40,7 +40,7 @@ interface OnboardingModalProps {
 export const OnboardingModal: React.FC<OnboardingModalProps> = ({ visible, onComplete }) => {
   const insets = useSafeAreaInsets();
   const [currentStep, setCurrentStep] = useState<'welcome' | 'pair' | 'code' | 'done'>('welcome');
-  const [ip, setIp] = useState('192.168.31.30');
+  const [ip, setIp] = useState('');
   const [port, setPort] = useState('8088');
   const [discoveredHosts, setDiscoveredHosts] = useState<DiscoveredHost[]>([]);
   const [scanning, setScanning] = useState(false);
@@ -69,11 +69,13 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({ visible, onCom
     setScanning(true);
     setErrorMsg(null);
     try {
-      const direct = await ApiClient.scanHost(ip, 8088);
       const hosts: DiscoveredHost[] = [];
-      if (direct) hosts.push(direct);
+      if (ip && ip.trim()) {
+        const direct = await ApiClient.scanHost(ip.trim(), 8088);
+        if (direct) hosts.push(direct);
+      }
 
-      const subnetBase = ip.split('.').slice(0, 3).join('.');
+      const subnetBase = ip && ip.includes('.') ? ip.trim().split('.').slice(0, 3).join('.') : undefined;
       const found = await ApiClient.discoverSubnet(subnetBase, 8088);
       for (const h of found) {
         if (!hosts.some((existing) => existing.ip === h.ip)) {
@@ -81,7 +83,7 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({ visible, onCom
         }
       }
       setDiscoveredHosts(hosts);
-      if (hosts.length > 0 && !hosts.some((h) => h.ip === ip)) {
+      if (hosts.length > 0 && !ip) {
         setIp(hosts[0].ip);
       }
     } catch {
@@ -329,7 +331,7 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({ visible, onCom
                 setIp(val);
                 setErrorMsg(null);
               }}
-              placeholder="192.168.31.30"
+              placeholder="e.g. 192.168.1.50"
               placeholderTextColor={Palette.overlay0}
               autoCapitalize="none"
             />

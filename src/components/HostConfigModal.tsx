@@ -125,7 +125,7 @@ export const HostConfigModal: React.FC<HostConfigModalProps> = ({
               setIp(val);
               setValidationError(null);
             }}
-            placeholder="192.168.31.30"
+            placeholder="e.g. 192.168.1.50"
             placeholderTextColor={Palette.overlay0}
             autoCapitalize="none"
             autoCorrect={false}

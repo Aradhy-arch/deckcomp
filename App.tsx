@@ -207,6 +207,10 @@ function DeckCompMain() {
   const fetchWorkstationData = useCallback(async () => {
     if (!apiClientRef.current || !hostAddressLoaded) return;
     if (isPollingRef.current) return;
+    if (!hostConfig.hostIp || !hostConfig.hostIp.trim()) {
+      setNetworkStatus('offline');
+      return;
+    }
 
     isPollingRef.current = true;
     const currentGen = configGenRef.current;

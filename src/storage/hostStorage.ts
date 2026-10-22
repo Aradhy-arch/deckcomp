@@ -6,7 +6,7 @@ const STORAGE_KEY_PORT = '@deck_host_port';
 const STORAGE_KEY_FUN_TAB = '@deck_enable_fun_tab';
 
 export const DEFAULT_HOST_CONFIG: HostConfig = {
-  hostIp: '192.168.31.30',
+  hostIp: '',
   hostPort: 8088,
   enableFunTab: true,
 };

@@ -304,10 +304,12 @@ export class ApiClient {
 
   // Static discovery helper for scanning local network
   static async scanHost(ip: string, port: number = 8088): Promise<DiscoveredHost | null> {
+    if (!ip || !ip.trim()) return null;
+    const cleanIp = ip.trim();
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 1800);
+    const timer = setTimeout(() => controller.abort(), 1200);
     try {
-      const res = await fetch(`http://${ip}:${port}/api/v1/health`, {
+      const res = await fetch(`http://${cleanIp}:${port}/api/v1/health`, {
         signal: controller.signal,
       });
       clearTimeout(timer);
@@ -315,9 +317,9 @@ export class ApiClient {
         const data = await res.json();
         if (data.status === 'ok') {
           return {
-            ip,
+            ip: cleanIp,
             port,
-            hostname: data.hostname || ip,
+            hostname: data.hostname || cleanIp,
             version: data.version || '1.0.0',
           };
         }
@@ -328,15 +330,26 @@ export class ApiClient {
     return null;
   }
 
-  static async discoverSubnet(baseSubnetPrefix: string = '192.168.31', port: number = 8088): Promise<DiscoveredHost[]> {
-    const candidates = Array.from({ length: 254 }, (_, i) => `${baseSubnetPrefix}.${i + 1}`);
+  static async discoverSubnet(baseSubnetPrefix?: string, port: number = 8088): Promise<DiscoveredHost[]> {
+    const prefixes = baseSubnetPrefix && baseSubnetPrefix.trim()
+      ? [baseSubnetPrefix.trim()]
+      : ['192.168.1', '192.168.0', '192.168.31', '10.0.0'];
+
     const results: DiscoveredHost[] = [];
-    const batchSize = 35;
-    for (let i = 0; i < candidates.length; i += batchSize) {
-      const batch = candidates.slice(i, i + batchSize);
-      const batchResults = await Promise.all(batch.map((ip) => ApiClient.scanHost(ip, port)));
-      for (const host of batchResults) {
-        if (host) results.push(host);
+    for (const prefix of prefixes) {
+      const candidates = Array.from({ length: 254 }, (_, i) => `${prefix}.${i + 1}`);
+      const batchSize = 40;
+      for (let i = 0; i < candidates.length; i += batchSize) {
+        const batch = candidates.slice(i, i + batchSize);
+        const batchResults = await Promise.all(batch.map((candidateIp) => ApiClient.scanHost(candidateIp, port)));
+        for (const host of batchResults) {
+          if (host && !results.some((r) => r.ip === host.ip)) {
+            results.push(host);
+          }
+        }
+        if (results.length > 0 && !baseSubnetPrefix) {
+          return results;
+        }
       }
     }
     return results;

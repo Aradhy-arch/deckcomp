@@ -15,10 +15,12 @@
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#1e1e2e"
       },
-      "package": "com.deckcompanion.client",
+      "package": "com.aradhy.deckcomp",
+      "usesCleartextTraffic": true,
       "permissions": [
         "INTERNET",
         "ACCESS_NETWORK_STATE",
+        "ACCESS_WIFI_STATE",
         "READ_EXTERNAL_STORAGE",
         "VIBRATE",
         "POST_NOTIFICATIONS"
@@ -36,6 +38,11 @@
           "imageWidth": 150
         }
       ]
-    ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "2f7f2c59-c6df-4597-935a-2c828995327f"
+      }
+    }
   }
 }
