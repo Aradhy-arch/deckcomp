@@ -295,7 +295,56 @@ if [ -f "$INSTALL_DIR/desktop/deckcomp-send.sh" ]; then
     chmod +x "$HOME/.local/share/nautilus/scripts/Send to Phone (DeckComp)"
 fi
 
-# 4. Desktop application icon
+# 4. XFCE Thunar Custom Action
+THUNAR_DIR="$HOME/.config/Thunar"
+THUNAR_UCA="$THUNAR_DIR/uca.xml"
+if [ -d "$THUNAR_DIR" ] || which thunar >/dev/null 2>&1; then
+    mkdir -p "$THUNAR_DIR"
+    python3 - << 'PYEOF' 2>/dev/null || true
+import xml.etree.ElementTree as ET
+from pathlib import Path
+
+uca_path = Path.home() / ".config" / "Thunar" / "uca.xml"
+if not uca_path.exists():
+    root = ET.Element("actions")
+    tree = ET.ElementTree(root)
+else:
+    try:
+        tree = ET.parse(uca_path)
+        root = tree.getroot()
+    except Exception:
+        root = ET.Element("actions")
+        tree = ET.ElementTree(root)
+
+exists = False
+for act in root.findall("action"):
+    cmd = act.find("command")
+    if cmd is not None and "deck-send" in (cmd.text or ""):
+        exists = True
+        break
+
+if not exists:
+    action = ET.SubElement(root, "action")
+    ET.SubElement(action, "icon").text = "deckcomp"
+    ET.SubElement(action, "name").text = "Send to Phone (DeckComp)"
+    ET.SubElement(action, "submenu").text = ""
+    ET.SubElement(action, "unique-id").text = "deckcomp-send-action-1"
+    ET.SubElement(action, "command").text = "deck-send %F"
+    ET.SubElement(action, "description").text = "Send selected file(s) to phone via DeckComp"
+    ET.SubElement(action, "range").text = "*"
+    ET.SubElement(action, "patterns").text = "*"
+    ET.SubElement(action, "audio-files")
+    ET.SubElement(action, "image-files")
+    ET.SubElement(action, "other-files")
+    ET.SubElement(action, "text-files")
+    ET.SubElement(action, "video-files")
+    
+    ET.indent(tree, space="\t", level=0)
+    tree.write(uca_path, encoding="utf-8", xml_declaration=True)
+PYEOF
+fi
+
+# 5. Desktop application icon
 mkdir -p "$HOME/.local/share/icons/hicolor/512x512/apps"
 if [ -f "$INSTALL_DIR/desktop/deckcomp.png" ]; then
     cp "$INSTALL_DIR/desktop/deckcomp.png" "$HOME/.local/share/icons/hicolor/512x512/apps/deckcomp.png"

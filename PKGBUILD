@@ -22,6 +22,7 @@ optdepends=(
     'lavat: Matrix fluid terminal visualizer'
     'cbonsai: Ambient bonsai tree terminal visualizer'
     'dolphin: For KDE Dolphin file-manager right-click send action'
+    'thunar: For XFCE Thunar file-manager right-click send action'
 )
 install=deckcomp.install
 source=("$pkgname-$pkgver.tar.gz::$url/archive/v$pkgver.tar.gz")

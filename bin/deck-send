@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
 """
-DeckComp CLI tool: Stage a file on Arch host for mobile phone download.
-Usage: deck-send <file_path>
+DeckComp CLI tool: Stage file(s) on Arch host for mobile phone download.
+Usage: deck-send <file_path> [file_path ...]
 """
 import json
 import os
+import shutil
+import subprocess
 import sys
 import urllib.error
 import urllib.request
@@ -14,42 +16,54 @@ DEFAULT_PORT = int(os.environ.get("DECK_PORT", "8088"))
 HOST_URL = f"http://127.0.0.1:{DEFAULT_PORT}/api/v1/share/stage"
 
 
-def main():
-    if len(sys.argv) < 2 or sys.argv[1] in ("-h", "--help"):
-        print("Usage: deck-send <path-to-file>")
-        print("Stages a file on your Arch Linux host for your connected DeckComp phone.")
-        sys.exit(0)
+def notify(summary: str, body: str, urgency: str = "normal"):
+    notify_bin = shutil.which("notify-send")
+    if notify_bin:
+        try:
+            subprocess.run(
+                [notify_bin, "-u", urgency, "-a", "DeckComp", "-i", "deckcomp", summary, body],
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                timeout=3,
+            )
+        except Exception:
+            pass
 
-    target_path = Path(sys.argv[1]).resolve()
+
+def get_auth_token() -> str:
+    token = os.environ.get("DECK_AUTH_TOKEN")
+    if token:
+        return token
+
+    for config_dir in ("deckcomp", "deckcompanion"):
+        token_file = Path.home() / ".config" / config_dir / "token"
+        if token_file.exists():
+            try:
+                return token_file.read_text(encoding="utf-8").strip()
+            except OSError:
+                pass
+    return ""
+
+
+def stage_single_file(target_path: Path, token: str) -> bool:
     if not target_path.exists():
         print(f"Error: File not found: {target_path}", file=sys.stderr)
-        sys.exit(1)
+        return False
 
     if not target_path.is_file():
         print(f"Error: Path is not a regular file: {target_path}", file=sys.stderr)
-        sys.exit(1)
+        return False
 
     payload = json.dumps({"path": str(target_path)}).encode("utf-8")
     headers = {"Content-Type": "application/json"}
-
-    # Attach master auth token if available
-    token = os.environ.get("DECK_AUTH_TOKEN")
-    token_file = Path.home() / ".config" / "deckcomp" / "token"
-    if not token_file.exists():
-        token_file = Path.home() / ".config" / "deckcompanion" / "token"
-    if not token and token_file.exists():
-        try:
-            token = token_file.read_text(encoding="utf-8").strip()
-        except OSError:
-            pass
-
     if token:
         headers["Authorization"] = f"Bearer {token}"
 
     req = urllib.request.Request(
         HOST_URL,
         data=payload,
-        headers=headers
+        headers=headers,
     )
 
     try:
@@ -58,10 +72,38 @@ def main():
             filename = res_data.get("filename", target_path.name)
             size_kb = max(1, res_data.get("size_bytes", 0) // 1024)
             print(f"✓ Staged '{filename}' ({size_kb} KB) for mobile download.")
-            print("  Open DeckComp on your phone to receive it.")
+            return True
     except urllib.error.URLError as e:
         print(f"Error connecting to DeckComp daemon at {HOST_URL}: {e}", file=sys.stderr)
-        print("Ensure 'systemctl --user status deckcomp.service' is running.", file=sys.stderr)
+        notify(
+            "DeckComp Offline",
+            "Cannot connect to DeckComp daemon. Start it with:\nsystemctl --user start deckcomp.service",
+            urgency="critical",
+        )
+        return False
+    except Exception as e:
+        print(f"Failed to stage '{target_path.name}': {e}", file=sys.stderr)
+        return False
+
+
+def main():
+    if len(sys.argv) < 2 or sys.argv[1] in ("-h", "--help"):
+        print("Usage: deck-send <path-to-file> [more-files...]")
+        print("Stages files on your Arch Linux host for your connected DeckComp phone.")
+        sys.exit(0)
+
+    token = get_auth_token()
+    success_count = 0
+    total = len(sys.argv) - 1
+
+    for arg in sys.argv[1:]:
+        p = Path(arg).resolve()
+        if stage_single_file(p, token):
+            success_count += 1
+
+    if success_count > 0:
+        print(f"Done: {success_count}/{total} file(s) staged. Open DeckComp on your phone to download.")
+    else:
         sys.exit(1)
 
 

@@ -1,0 +1,15 @@
+<action>
+	<icon>deckcomp</icon>
+	<name>Send to Phone (DeckComp)</name>
+	<submenu></submenu>
+	<unique-id>deckcomp-send-action-1</unique-id>
+	<command>deck-send %F</command>
+	<description>Send selected file(s) to phone via DeckComp</description>
+	<range>*</range>
+	<patterns>*</patterns>
+	<audio-files/>
+	<image-files/>
+	<other-files/>
+	<text-files/>
+	<video-files/>
+</action>

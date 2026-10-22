@@ -19,6 +19,7 @@ pkgbase = deckcomp
 	optdepends = lavat: Matrix fluid terminal visualizer
 	optdepends = cbonsai: Ambient bonsai tree terminal visualizer
 	optdepends = dolphin: For KDE Dolphin file-manager right-click send action
+	optdepends = thunar: For XFCE Thunar file-manager right-click send action
 	source = deckcomp-1.0.0.tar.gz::https://github.com/Aradhy-arch/deckcomp/archive/v1.0.0.tar.gz
 	sha256sums = 3ce4426c62360804bbf7085ba0453ebad385f1f7e726322f1f43634ed65ebf0a
 

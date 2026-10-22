@@ -73,6 +73,33 @@ info "Removing desktop and file manager integrations..."
 rm -f "$HOME/.local/share/applications/deckcomp.desktop"
 rm -f "$HOME/.local/share/kio/servicemenus/deckcomp-send.desktop"
 rm -f "$HOME/.local/share/nautilus/scripts/Send to Phone (DeckComp)"
+
+# Remove Thunar custom action
+if [ -f "$HOME/.config/Thunar/uca.xml" ]; then
+    python3 - << 'PYEOF' 2>/dev/null || true
+import xml.etree.ElementTree as ET
+from pathlib import Path
+
+uca_path = Path.home() / ".config" / "Thunar" / "uca.xml"
+if uca_path.exists():
+    try:
+        tree = ET.parse(uca_path)
+        root = tree.getroot()
+        changed = False
+        for act in list(root.findall("action")):
+            cmd = act.find("command")
+            uid = act.find("unique-id")
+            if (cmd is not None and "deck-send" in (cmd.text or "")) or (uid is not None and "deckcomp" in (uid.text or "")):
+                root.remove(act)
+                changed = True
+        if changed:
+            ET.indent(tree, space="\t", level=0)
+            tree.write(uca_path, encoding="utf-8", xml_declaration=True)
+    except Exception:
+        pass
+PYEOF
+fi
+
 update-desktop-database "$HOME/.local/share/applications" 2>/dev/null || true
 success "Desktop actions removed."
 

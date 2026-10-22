@@ -20,4 +20,4 @@ ReadWritePaths=%h/Downloads %h/.config/deckcomp %h/.config/deckcompanion %h/.loc
 ProtectHome=read-only
 
 [Install]
-WantedBy=graphical-session.target
+WantedBy=default.target
