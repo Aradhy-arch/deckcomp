@@ -1,4 +1,5 @@
 import * as Battery from 'expo-battery';
+import * as Clipboard from 'expo-clipboard';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import { SlidersHorizontal, Sparkles, Terminal, Upload } from 'lucide-react-native';
@@ -259,15 +260,47 @@ function DeckCompMain() {
     }
   }, [hostAddressLoaded, clientBattery]);
 
+  // Auto-clipboard sync state and helper (like KDE Connect)
+  const lastPushedClipRef = useRef<string>('');
+
+  const autoSyncClipboard = useCallback(async () => {
+    if (!apiClientRef.current || networkStatus !== 'online') return;
+    try {
+      const text = await Clipboard.getStringAsync();
+      if (text && text.trim() && text !== lastPushedClipRef.current) {
+        lastPushedClipRef.current = text;
+        await apiClientRef.current.pushClipboard(text);
+      }
+    } catch {
+      // Auto-sync failure is non-blocking
+    }
+  }, [networkStatus]);
+
+  // Setup auto-clipboard sync listener (Phone -> Laptop)
+  useEffect(() => {
+    let sub: { remove: () => void } | null = null;
+    try {
+      sub = Clipboard.addClipboardListener(async () => {
+        await autoSyncClipboard();
+      });
+    } catch {}
+
+    return () => {
+      sub?.remove();
+    };
+  }, [autoSyncClipboard]);
+
   // Periodic polling management with 12s interval and AppState guard
   useEffect(() => {
     if (!hostAddressLoaded) return;
 
     fetchWorkstationData();
+    autoSyncClipboard();
 
     const handleAppStateChange = (nextAppState: AppStateStatus) => {
       if (nextAppState === 'active') {
         fetchWorkstationData();
+        autoSyncClipboard();
         if (!pollTimerRef.current) {
           pollTimerRef.current = setInterval(fetchWorkstationData, 12000);
         }
@@ -289,14 +322,42 @@ function DeckCompMain() {
         pollTimerRef.current = null;
       }
     };
-  }, [hostAddressLoaded, fetchWorkstationData]);
+  }, [hostAddressLoaded, fetchWorkstationData, autoSyncClipboard]);
 
-  // Manual pull-to-refresh
+  // Manual pull-to-refresh: immediately re-reads phone battery and workstation metrics
   const handleRefresh = async () => {
     setRefreshing(true);
-    await fetchWorkstationData();
-    if (isMountedRef.current) {
-      setRefreshing(false);
+    try {
+      // 1. Fresh query for phone battery metrics
+      const [level, state, lowPower] = await Promise.all([
+        Battery.getBatteryLevelAsync().catch(() => -1),
+        Battery.getBatteryStateAsync().catch(() => 0),
+        Battery.isLowPowerModeEnabledAsync().catch(() => false),
+      ]);
+
+      const stateNameMap: Record<number, string> = {
+        0: 'unknown',
+        1: 'unplugged',
+        2: 'charging',
+        3: 'full',
+      };
+
+      if (isMountedRef.current) {
+        setClientBattery({
+          batteryLevel: level >= 0 ? level : null,
+          batteryState: stateNameMap[state] || 'unplugged',
+          isLowPower: lowPower,
+        });
+      }
+
+      // 2. Force refetch workstation data (bypass isPollingRef lock)
+      isPollingRef.current = false;
+      await fetchWorkstationData();
+      await autoSyncClipboard();
+    } finally {
+      if (isMountedRef.current) {
+        setRefreshing(false);
+      }
     }
   };
 
@@ -384,7 +445,8 @@ function DeckCompMain() {
             refreshing={refreshing}
             onRefresh={handleRefresh}
             tintColor={Palette.mauve}
-            colors={[Palette.mauve]}
+            colors={[Palette.mauve, Palette.blue]}
+            progressBackgroundColor={Palette.mantle}
           />
         }
       >

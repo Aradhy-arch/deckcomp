@@ -8,9 +8,8 @@ import {
   Trash2,
   X,
 } from 'lucide-react-native';
-import React from 'react';
+import React, { useState } from 'react';
 import {
-  Alert,
   Modal,
   ScrollView,
   StyleSheet,
@@ -20,6 +19,7 @@ import {
 } from 'react-native';
 import { Palette } from '../constants/theme';
 import { DeviceConfig } from '../types';
+import { ConfirmModal } from './ConfirmModal';
 
 interface SideDrawerProps {
   visible: boolean;
@@ -44,19 +44,25 @@ export const SideDrawer: React.FC<SideDrawerProps> = ({
   onOpenSettings,
   onResetOnboarding,
 }) => {
+  const [unpairTarget, setUnpairTarget] = useState<{ id: string; name: string } | null>(null);
+  const [warningModal, setWarningModal] = useState<{ title: string; message: string } | null>(null);
+
   const confirmDelete = (id: string, name: string) => {
     if (devices.length <= 1) {
-      Alert.alert('Cannot Remove', 'You must have at least one configured workstation.');
+      setWarningModal({
+        title: 'Cannot Remove',
+        message: 'You must have at least one configured workstation.',
+      });
       return;
     }
-    Alert.alert('Unpair Workstation', `Remove "${name}" from your saved devices?`, [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Remove',
-        style: 'destructive',
-        onPress: () => onRemoveDevice(id),
-      },
-    ]);
+    setUnpairTarget({ id, name });
+  };
+
+  const handlePerformUnpair = () => {
+    if (unpairTarget) {
+      onRemoveDevice(unpairTarget.id);
+      setUnpairTarget(null);
+    }
   };
 
   return (
@@ -177,6 +183,30 @@ export const SideDrawer: React.FC<SideDrawerProps> = ({
             </TouchableOpacity>
           </View>
         </View>
+
+        {/* Unpair Confirmation Modal */}
+        <ConfirmModal
+          visible={unpairTarget !== null}
+          title="Unpair Workstation"
+          message={`Remove "${unpairTarget?.name}" from your saved devices? This workstation will be disconnected.`}
+          confirmText="Unpair"
+          cancelText="Cancel"
+          isDestructive={true}
+          onConfirm={handlePerformUnpair}
+          onCancel={() => setUnpairTarget(null)}
+        />
+
+        {/* Warning Modal (when only 1 device remains) */}
+        <ConfirmModal
+          visible={warningModal !== null}
+          title={warningModal?.title || 'Notice'}
+          message={warningModal?.message || ''}
+          confirmText="Understood"
+          cancelText="Close"
+          isDestructive={false}
+          onConfirm={() => setWarningModal(null)}
+          onCancel={() => setWarningModal(null)}
+        />
       </View>
     </Modal>
   );

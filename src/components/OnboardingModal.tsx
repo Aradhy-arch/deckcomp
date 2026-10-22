@@ -1,4 +1,5 @@
 import {
+  AlertTriangle,
   Bell,
   Check,
   ChevronRight,
@@ -12,6 +13,7 @@ import {
   SlidersHorizontal,
   Smartphone,
   Sparkles,
+  Terminal,
   Zap,
 } from 'lucide-react-native';
 import React, { useEffect, useState } from 'react';
@@ -29,8 +31,24 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ApiClient } from '../api/client';
 import { Palette } from '../constants/theme';
-import { getLocalDeviceUuid, setOnboardingCompleted } from '../storage/deviceStorage';
+import {
+  getLocalDeviceUuid,
+  getUserDistro,
+  setOnboardingCompleted,
+  setUserDistro,
+} from '../storage/deviceStorage';
 import { DeviceConfig, DiscoveredHost } from '../types';
+
+const POPULAR_DISTROS = [
+  'Arch Linux',
+  'Fedora',
+  'Ubuntu',
+  'Debian',
+  'NixOS',
+  'Void Linux',
+  'openSUSE',
+  'Gentoo',
+];
 
 interface OnboardingModalProps {
   visible: boolean;
@@ -39,7 +57,13 @@ interface OnboardingModalProps {
 
 export const OnboardingModal: React.FC<OnboardingModalProps> = ({ visible, onComplete }) => {
   const insets = useSafeAreaInsets();
-  const [currentStep, setCurrentStep] = useState<'welcome' | 'pair' | 'code' | 'done'>('welcome');
+  const [currentStep, setCurrentStep] = useState<
+    'welcome' | 'distro' | 'pair' | 'code' | 'done'
+  >('welcome');
+  const [distro, setDistro] = useState('Arch Linux');
+  const [customDistroInput, setCustomDistroInput] = useState('');
+  const [showEasterEgg, setShowEasterEgg] = useState(false);
+
   const [ip, setIp] = useState('');
   const [port, setPort] = useState('8088');
   const [discoveredHosts, setDiscoveredHosts] = useState<DiscoveredHost[]>([]);
@@ -56,13 +80,46 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({ visible, onCom
       setCurrentStep('welcome');
       setPinCode('');
       setErrorMsg(null);
+      setShowEasterEgg(false);
+      getUserDistro().then((saved) => {
+        if (saved) setDistro(saved);
+      });
       getLocalDeviceUuid().then(setDeviceUuid);
     }
   }, [visible]);
 
-  const handleStartPairing = () => {
+  const handleDistroInputChange = (val: string) => {
+    setCustomDistroInput(val);
+    if (/windows/i.test(val)) {
+      setShowEasterEgg(true);
+    } else if (val.trim()) {
+      setDistro(val.trim());
+    }
+  };
+
+  const handleSelectChip = (d: string) => {
+    if (/windows/i.test(d)) {
+      setShowEasterEgg(true);
+      return;
+    }
+    setDistro(d);
+    setCustomDistroInput(d);
+  };
+
+  const handleProceedToPairing = async () => {
+    const chosen = (customDistroInput.trim() || distro || 'Linux').trim();
+    if (/windows/i.test(chosen)) {
+      setShowEasterEgg(true);
+      return;
+    }
+    await setUserDistro(chosen);
+    setDistro(chosen);
     setCurrentStep('pair');
     scanLocalNetwork();
+  };
+
+  const handleStartPairing = () => {
+    setCurrentStep('distro');
   };
 
   const scanLocalNetwork = async () => {
@@ -135,7 +192,7 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({ visible, onCom
 
       const dev: DeviceConfig = {
         id: `dev_${ip.trim()}_${activePort}`,
-        name: res.device_name || 'Arch Linux Host',
+        name: res.device_name || `${distro || 'Linux'} Host`,
         hostIp: ip.trim(),
         hostPort: activePort,
         isPaired: true,
@@ -180,7 +237,7 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({ visible, onCom
               />
               <Text style={styles.brandTitle}>DeckComp</Text>
               <Text style={styles.brandSub}>
-                Zero-bloat Arch Linux companion ecosystem on Wayland.
+                Zero-bloat Linux companion ecosystem on Wayland.
               </Text>
             </View>
 
@@ -216,7 +273,7 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({ visible, onCom
                 <View style={styles.featureText}>
                   <Text style={styles.featureTitle}>Bidirectional File Drops</Text>
                   <Text style={styles.featureDesc}>
-                    Send photos to ~/Downloads, or run 'deck-send &lt;file&gt;' on Arch to receive them here.
+                    Send photos to ~/Downloads, or run 'deck-send &lt;file&gt;' on your PC to receive them here.
                   </Text>
                 </View>
               </View>
@@ -249,6 +306,90 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({ visible, onCom
           </ScrollView>
         )}
 
+        {/* Step 1.5: Linux Distribution Selection */}
+        {currentStep === 'distro' && (
+          <ScrollView
+            contentContainerStyle={[
+              styles.scrollContent,
+              {
+                paddingTop: Math.max(insets.top + 16, 44),
+                paddingBottom: Math.max(insets.bottom + 24, 32),
+              },
+            ]}
+            showsVerticalScrollIndicator={false}
+          >
+            <View style={styles.stepHeader}>
+              <View style={styles.distroHeaderIconCircle}>
+                <Terminal size={24} color={Palette.mauve} />
+              </View>
+              <Text style={styles.stepTitle}>Select Your Distribution</Text>
+              <Text style={styles.stepDesc}>
+                DeckComp is tailor-made for Linux workstations on Wayland. Tell us what distro powers your setup:
+              </Text>
+            </View>
+
+            <Text style={styles.scanLabel}>POPULAR DISTRIBUTIONS</Text>
+            <View style={styles.distroChipsGrid}>
+              {POPULAR_DISTROS.map((d) => {
+                const isSelected =
+                  distro.toLowerCase() === d.toLowerCase() ||
+                  customDistroInput.toLowerCase() === d.toLowerCase();
+                return (
+                  <TouchableOpacity
+                    key={d}
+                    style={[styles.distroChip, isSelected && styles.activeDistroChip]}
+                    onPress={() => handleSelectChip(d)}
+                    activeOpacity={0.7}
+                  >
+                    <Text
+                      style={[
+                        styles.distroChipText,
+                        isSelected && styles.activeDistroChipText,
+                      ]}
+                    >
+                      {d}
+                    </Text>
+                    {isSelected && (
+                      <Check size={14} color={Palette.mauve} style={{ marginLeft: 6 }} />
+                    )}
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+
+            <Text style={[styles.scanLabel, { marginTop: 18 }]}>
+              OR SPECIFY YOUR DISTRO MANUALLY
+            </Text>
+            <TextInput
+              style={styles.manualInput}
+              value={customDistroInput}
+              onChangeText={handleDistroInputChange}
+              placeholder="e.g. Arch Linux, Fedora, Debian, Void..."
+              placeholderTextColor={Palette.overlay0}
+              autoCapitalize="words"
+            />
+
+            <TouchableOpacity
+              style={styles.actionBtn}
+              onPress={handleProceedToPairing}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.actionBtnText}>
+                Continue: Find My {distro || 'Linux'} Host
+              </Text>
+              <ChevronRight size={18} color={Palette.crust} />
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.skipBtn}
+              onPress={() => setCurrentStep('welcome')}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.skipBtnText}>Back to Welcome</Text>
+            </TouchableOpacity>
+          </ScrollView>
+        )}
+
         {/* Step 2: Auto-Discovery & Pairing Request */}
         {currentStep === 'pair' && (
           <ScrollView
@@ -262,9 +403,9 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({ visible, onCom
             showsVerticalScrollIndicator={false}
           >
             <View style={styles.stepHeader}>
-              <Text style={styles.stepTitle}>Locate Your Arch Host</Text>
+              <Text style={styles.stepTitle}>Locate Your {distro || 'Linux'} Host</Text>
               <Text style={styles.stepDesc}>
-                Make sure your phone is on the same Wi-Fi network as your computer.
+                Make sure your phone is on the same Wi-Fi network as your {distro || 'Linux'} computer.
               </Text>
             </View>
 
@@ -372,7 +513,7 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({ visible, onCom
 
             <Text style={styles.stepTitle}>Enter Pairing Code</Text>
             <Text style={styles.codeInstructions}>
-              A critical notification has appeared on your Arch Linux screen. Enter the 6-digit code shown there:
+              A critical notification has appeared on your {distro || 'Linux'} screen. Enter the 6-digit code shown there:
             </Text>
 
             {errorMsg && (
@@ -431,7 +572,7 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({ visible, onCom
 
             <Text style={styles.stepTitle}>Workstation Linked!</Text>
             <Text style={styles.codeInstructions}>
-              Successfully paired with {pairedDevice?.name || 'your Arch Linux computer'}.
+              Successfully paired with {pairedDevice?.name || `${distro || 'Linux'} computer`}.
             </Text>
 
             <View style={styles.notifHintCard}>
@@ -453,6 +594,63 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({ visible, onCom
             </TouchableOpacity>
           </View>
         )}
+
+        {/* Easter Egg Modal when Windows is typed anywhere */}
+        <Modal
+          visible={showEasterEgg}
+          transparent={true}
+          animationType="fade"
+          onRequestClose={() => setShowEasterEgg(false)}
+        >
+          <View style={styles.easterEggBackdrop}>
+            <View style={styles.easterEggCard}>
+              <View style={styles.hazardIconOuter}>
+                <View style={styles.hazardIconInner}>
+                  <AlertTriangle size={38} color={Palette.peach} />
+                </View>
+              </View>
+
+              <Text style={styles.easterEggTitle}>DeckComp - Setup Aborted</Text>
+
+              <View style={styles.roastBadge}>
+                <Text style={styles.roastBadgeText}>🚫 MICROSLOP &amp; WINDOWS DETECTED 🚫</Text>
+              </View>
+
+              <Text style={styles.easterEggBody}>
+                <Text style={styles.boldKindly}>Kindly</Text> uninstall this app an go on with your miserable life,as we don't want to touch your dirty system and uninstall it Ourselves...
+              </Text>
+
+              <Text style={styles.easterEggRoastSub}>
+                DeckComp is handcrafted exclusively for clean, zero-bloat Linux workstations on Wayland. We refuse to connect to proprietary telemetry, forced restarts, and Edge spyware.
+              </Text>
+
+              <View style={styles.easterEggBtnCol}>
+                <TouchableOpacity
+                  style={styles.repentBtn}
+                  onPress={() => {
+                    setCustomDistroInput('');
+                    setDistro('Arch Linux');
+                    setShowEasterEgg(false);
+                  }}
+                  activeOpacity={0.8}
+                >
+                  <Text style={styles.repentBtnText}>I Repent (I'll Install Linux 🐧)</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={styles.dismissEasterBtn}
+                  onPress={() => {
+                    setCustomDistroInput('');
+                    setShowEasterEgg(false);
+                  }}
+                  activeOpacity={0.7}
+                >
+                  <Text style={styles.dismissEasterText}>Clear &amp; Try Again</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </Modal>
       </View>
     </Modal>
   );
@@ -749,5 +947,158 @@ const styles = StyleSheet.create({
     color: Palette.subtext0,
     marginTop: 2,
     lineHeight: 15,
+  },
+  distroHeaderIconCircle: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: Palette.surface0,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: Palette.surface1,
+  },
+  distroChipsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginTop: 8,
+    marginBottom: 12,
+  },
+  distroChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: Palette.mantle,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: Palette.surface1,
+  },
+  activeDistroChip: {
+    backgroundColor: Palette.surface1,
+    borderColor: Palette.mauve,
+  },
+  distroChipText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: Palette.subtext1,
+  },
+  activeDistroChipText: {
+    color: Palette.mauve,
+    fontWeight: '700',
+  },
+  easterEggBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(17, 17, 27, 0.92)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  easterEggCard: {
+    backgroundColor: Palette.mantle,
+    borderRadius: 24,
+    padding: 24,
+    borderWidth: 1.5,
+    borderColor: Palette.red,
+    alignItems: 'center',
+    width: '100%',
+    maxWidth: 380,
+    elevation: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.5,
+    shadowRadius: 20,
+  },
+  hazardIconOuter: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    backgroundColor: 'rgba(250, 179, 135, 0.12)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 14,
+    borderWidth: 1.5,
+    borderColor: 'rgba(250, 179, 135, 0.35)',
+  },
+  hazardIconInner: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    backgroundColor: 'rgba(243, 139, 168, 0.18)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  easterEggTitle: {
+    fontSize: 20,
+    fontWeight: '800',
+    color: Palette.red,
+    textAlign: 'center',
+    marginBottom: 8,
+    letterSpacing: -0.3,
+  },
+  roastBadge: {
+    backgroundColor: 'rgba(243, 139, 168, 0.12)',
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+    borderRadius: 12,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(243, 139, 168, 0.25)',
+  },
+  roastBadgeText: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: Palette.red,
+    letterSpacing: 0.5,
+  },
+  easterEggBody: {
+    fontSize: 15,
+    color: Palette.text,
+    textAlign: 'center',
+    lineHeight: 22,
+    marginBottom: 14,
+  },
+  boldKindly: {
+    fontWeight: '900',
+    color: Palette.peach,
+    textDecorationLine: 'underline',
+  },
+  easterEggRoastSub: {
+    fontSize: 12,
+    color: Palette.subtext0,
+    textAlign: 'center',
+    lineHeight: 18,
+    marginBottom: 24,
+  },
+  easterEggBtnCol: {
+    width: '100%',
+    gap: 10,
+  },
+  repentBtn: {
+    backgroundColor: Palette.mauve,
+    paddingVertical: 14,
+    borderRadius: 14,
+    alignItems: 'center',
+    elevation: 4,
+  },
+  repentBtnText: {
+    color: Palette.crust,
+    fontSize: 14,
+    fontWeight: '800',
+  },
+  dismissEasterBtn: {
+    backgroundColor: Palette.surface0,
+    paddingVertical: 12,
+    borderRadius: 14,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: Palette.surface1,
+  },
+  dismissEasterText: {
+    color: Palette.subtext1,
+    fontSize: 13,
+    fontWeight: '600',
   },
 });

@@ -93,3 +93,17 @@ export async function isOnboardingCompleted(): Promise<boolean> {
 export async function setOnboardingCompleted(completed: boolean): Promise<void> {
   await AsyncStorage.setItem(STORAGE_KEY_ONBOARDING_DONE, completed ? 'true' : 'false');
 }
+
+const STORAGE_KEY_USER_DISTRO = '@deck_user_distro_v1';
+
+export async function getUserDistro(): Promise<string> {
+  try {
+    const distro = await AsyncStorage.getItem(STORAGE_KEY_USER_DISTRO);
+    if (distro && distro.trim()) return distro.trim();
+  } catch {}
+  return 'Linux';
+}
+
+export async function setUserDistro(distro: string): Promise<void> {
+  await AsyncStorage.setItem(STORAGE_KEY_USER_DISTRO, distro.trim());
+}

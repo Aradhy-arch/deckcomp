@@ -14,7 +14,7 @@ const isExpoGo =
   Constants.executionEnvironment === ExecutionEnvironment.StoreClient;
 
 let isInitialized = false;
-let currentHostname = 'Arch Linux';
+let currentHostname = 'Linux PC';
 let feedbackResetTimer: NodeJS.Timeout | null = null;
 
 // Lazy-load expo-notifications only in native standalone builds (never in Expo Go)
@@ -184,7 +184,7 @@ async function updateNotificationFeedback(feedbackMsg: string) {
   } catch {}
 }
 
-export async function showPersistentNotification(hostname: string = 'Arch Linux') {
+export async function showPersistentNotification(hostname: string = 'Linux PC') {
   if (Platform.OS !== 'android' || isExpoGo) return;
   const Notifications = getNotificationsModule();
   if (!Notifications) return;

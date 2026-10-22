@@ -133,7 +133,7 @@ export const FileDropDeck: React.FC<FileDropDeckProps> = ({ apiClient }) => {
         <View style={styles.dropZone}>
           <UploadCloud size={36} color={Palette.sapphire} style={styles.dropIcon} />
           <Text style={styles.dropTitle}>Phone → Host Upload</Text>
-          <Text style={styles.dropSub}>Send files directly into Arch ~/Downloads</Text>
+          <Text style={styles.dropSub}>Send files directly into Linux ~/Downloads</Text>
 
           <TouchableOpacity
             style={styles.pickBtn}
@@ -223,7 +223,7 @@ export const FileDropDeck: React.FC<FileDropDeckProps> = ({ apiClient }) => {
           <View style={styles.emptyOutboxCard}>
             <Text style={styles.emptyOutboxTitle}>No pending files from host</Text>
             <Text style={styles.emptyOutboxSub}>
-              To send files from your Arch terminal directly to your phone, run:
+              To send files from your Linux terminal directly to your phone, run:
             </Text>
             <View style={styles.cliSnippet}>
               <Text style={styles.cliSnippetText}>$ deck-send &lt;filename&gt;</Text>

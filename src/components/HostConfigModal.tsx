@@ -108,7 +108,7 @@ export const HostConfigModal: React.FC<HostConfigModalProps> = ({
             <Text style={styles.headerTitle}>Workstation Connection</Text>
           </View>
           <Text style={styles.instruction}>
-            Enter the local IP and port of your Arch Linux daemon.
+            Enter the local IP and port of your Linux daemon.
           </Text>
 
           {validationError && (

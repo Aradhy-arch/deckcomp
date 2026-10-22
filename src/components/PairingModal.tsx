@@ -134,7 +134,7 @@ export const PairingModal: React.FC<PairingModalProps> = ({
 
       const pairedDevice: DeviceConfig = {
         id: `dev_${ip.trim()}_${activePort}`,
-        name: hostname || res.device_name || 'Arch Linux Host',
+        name: hostname || res.device_name || 'Linux Host',
         hostIp: ip.trim(),
         hostPort: activePort,
         isPaired: true,
@@ -180,7 +180,7 @@ export const PairingModal: React.FC<PairingModalProps> = ({
           {step === 'discover' ? (
             <ScrollView showsVerticalScrollIndicator={false}>
               <Text style={styles.instruction}>
-                Select an automatically discovered Arch host on your Wi-Fi, or enter its IP address:
+                Select an automatically discovered Linux host on your Wi-Fi, or enter its IP address:
               </Text>
 
               {/* Discovered Hosts List */}
@@ -287,7 +287,7 @@ export const PairingModal: React.FC<PairingModalProps> = ({
                 <ShieldCheck size={28} color={Palette.green} />
                 <Text style={styles.pinBannerTitle}>Desktop Notification Dispatched</Text>
                 <Text style={styles.pinBannerSub}>
-                  A critical notification with a 6-digit code has appeared on your Arch Linux screen.
+                  A critical notification with a 6-digit code has appeared on your Linux screen.
                 </Text>
               </View>
 

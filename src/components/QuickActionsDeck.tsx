@@ -8,7 +8,6 @@ import {
 import React, { useState } from 'react';
 import {
   ActivityIndicator,
-  Alert,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -16,6 +15,7 @@ import {
 } from 'react-native';
 import { ApiClient } from '../api/client';
 import { Palette } from '../constants/theme';
+import { ConfirmModal } from './ConfirmModal';
 
 interface QuickActionsDeckProps {
   apiClient: ApiClient | null;
@@ -25,6 +25,7 @@ export const QuickActionsDeck: React.FC<QuickActionsDeckProps> = ({ apiClient })
   const [activeAction, setActiveAction] = useState<string | null>(null);
   const [feedback, setFeedback] = useState<string | null>(null);
   const [showPower, setShowPower] = useState(false);
+  const [powerModal, setPowerModal] = useState<{ title: string; actionFn: () => Promise<void> } | null>(null);
 
   const triggerFeedback = (msg: string) => {
     setFeedback(msg);
@@ -81,25 +82,19 @@ export const QuickActionsDeck: React.FC<QuickActionsDeckProps> = ({ apiClient })
   };
 
   const confirmPower = (title: string, actionFn: () => Promise<void>) => {
-    Alert.alert(
-      title,
-      `Are you sure you want to ${title.toLowerCase()} your Arch Linux host?`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Confirm',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              await actionFn();
-              triggerFeedback(`${title} command dispatched`);
-            } catch (err: unknown) {
-              triggerFeedback(err instanceof Error ? err.message : 'Action failed');
-            }
-          },
-        },
-      ]
-    );
+    setPowerModal({ title, actionFn });
+  };
+
+  const handleExecutePower = async () => {
+    if (!powerModal) return;
+    const { title, actionFn } = powerModal;
+    setPowerModal(null);
+    try {
+      await actionFn();
+      triggerFeedback(`${title} command dispatched`);
+    } catch (err: unknown) {
+      triggerFeedback(err instanceof Error ? err.message : 'Action failed');
+    }
   };
 
   return (
@@ -214,6 +209,18 @@ export const QuickActionsDeck: React.FC<QuickActionsDeckProps> = ({ apiClient })
           </View>
         </View>
       )}
+
+      {/* Confirmation Modal for Host Power Actions */}
+      <ConfirmModal
+        visible={powerModal !== null}
+        title={`${powerModal?.title} Host`}
+        message={`Are you sure you want to ${powerModal?.title.toLowerCase()} your computer?`}
+        confirmText={powerModal?.title || 'Confirm'}
+        cancelText="Cancel"
+        isDestructive={true}
+        onConfirm={handleExecutePower}
+        onCancel={() => setPowerModal(null)}
+      />
     </View>
   );
 };

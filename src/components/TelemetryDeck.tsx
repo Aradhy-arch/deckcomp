@@ -50,7 +50,7 @@ export const TelemetryDeck: React.FC<TelemetryDeckProps> = ({
           </View>
           <Text style={styles.percentText}>{hostPercent}</Text>
           <Text style={styles.detailText}>
-            {hostBat?.power_supply_name || (hostTelemetry?.ac_connected ? 'Mains Power' : 'Arch Linux')}
+            {hostBat?.power_supply_name || (hostTelemetry?.ac_connected ? 'Mains Power' : 'Linux Host')}
           </Text>
         </View>
 
