@@ -13,7 +13,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import { ApiClient } from '../api/client';
+import { ApiClient, formatErrorMessage } from '../api/client';
 import { Palette } from '../constants/theme';
 import { updateNotificationFeedback } from '../services/notificationService';
 import { ConfirmModal } from './ConfirmModal';
@@ -34,7 +34,10 @@ export const QuickActionsDeck: React.FC<QuickActionsDeckProps> = ({ apiClient })
   };
 
   const handlePushClipboard = async () => {
-    if (!apiClient) return;
+    if (!apiClient) {
+      triggerFeedback('Host is disconnected');
+      return;
+    }
     setActiveAction('push_clip');
     try {
       const text = await Clipboard.getStringAsync();
@@ -48,14 +51,17 @@ export const QuickActionsDeck: React.FC<QuickActionsDeckProps> = ({ apiClient })
       triggerFeedback(`Copied to desktop (${text.length} chars)`);
       updateNotificationFeedback(`✓ Pushed to PC: "${preview}${suffix}"`);
     } catch (err: unknown) {
-      triggerFeedback(err instanceof Error ? err.message : 'Push failed');
+      triggerFeedback(formatErrorMessage(err, 'Host is disconnected'));
     } finally {
       setActiveAction(null);
     }
   };
 
   const handlePullClipboard = async () => {
-    if (!apiClient) return;
+    if (!apiClient) {
+      triggerFeedback('Host is disconnected');
+      return;
+    }
     setActiveAction('pull_clip');
     try {
       const data = await apiClient.getClipboard();
@@ -69,20 +75,23 @@ export const QuickActionsDeck: React.FC<QuickActionsDeckProps> = ({ apiClient })
       triggerFeedback(`Saved ${data.length} chars to phone`);
       updateNotificationFeedback(`✓ Pulled from PC: "${preview}${suffix}"`);
     } catch (err: unknown) {
-      triggerFeedback(err instanceof Error ? err.message : 'Pull failed');
+      triggerFeedback(formatErrorMessage(err, 'Host is disconnected'));
     } finally {
       setActiveAction(null);
     }
   };
 
   const handleLockSession = async () => {
-    if (!apiClient) return;
+    if (!apiClient) {
+      triggerFeedback('Host is disconnected');
+      return;
+    }
     setActiveAction('lock');
     try {
       await apiClient.lockSession();
       triggerFeedback('Wayland session locked');
     } catch (err: unknown) {
-      triggerFeedback(err instanceof Error ? err.message : 'Lock failed');
+      triggerFeedback(formatErrorMessage(err, 'Host is disconnected'));
     } finally {
       setActiveAction(null);
     }
@@ -96,11 +105,15 @@ export const QuickActionsDeck: React.FC<QuickActionsDeckProps> = ({ apiClient })
     if (!powerModal) return;
     const { title, actionFn } = powerModal;
     setPowerModal(null);
+    if (!apiClient) {
+      triggerFeedback('Host is disconnected');
+      return;
+    }
     try {
       await actionFn();
       triggerFeedback(`${title} command dispatched`);
     } catch (err: unknown) {
-      triggerFeedback(err instanceof Error ? err.message : 'Action failed');
+      triggerFeedback(formatErrorMessage(err, 'Host is disconnected'));
     }
   };
 

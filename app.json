@@ -16,7 +16,6 @@
         "backgroundColor": "#1e1e2e"
       },
       "package": "com.aradhy.deckcomp",
-      "usesCleartextTraffic": true,
       "permissions": [
         "INTERNET",
         "ACCESS_NETWORK_STATE",
@@ -38,7 +37,8 @@
           "image": "./assets/splash.png",
           "imageWidth": 150
         }
-      ]
+      ],
+      "expo-status-bar"
     ],
     "extra": {
       "eas": {

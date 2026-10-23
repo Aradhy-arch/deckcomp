@@ -30,7 +30,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import { ApiClient } from '../api/client';
+import { ApiClient, formatErrorMessage } from '../api/client';
 import { Palette } from '../constants/theme';
 import {
   addPreset,
@@ -130,7 +130,7 @@ export const FunStuffDeck: React.FC<FunStuffDeckProps> = ({ apiClient }) => {
 
   const handleLaunch = async (preset: FunPreset) => {
     if (!apiClient) {
-      triggerFeedback('Cannot launch: workstation offline');
+      triggerFeedback('Host is disconnected');
       return;
     }
 
@@ -150,7 +150,7 @@ export const FunStuffDeck: React.FC<FunStuffDeckProps> = ({ apiClient }) => {
         triggerFeedback(`Dispatched ${preset.title}`);
       }
     } catch (err: unknown) {
-      triggerFeedback(err instanceof Error ? err.message : 'Launch failed');
+      triggerFeedback(formatErrorMessage(err, 'Host is disconnected'));
     } finally {
       setLaunchingId(null);
     }

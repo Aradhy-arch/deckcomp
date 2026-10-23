@@ -9,7 +9,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import { ApiClient } from '../api/client';
+import { ApiClient, formatErrorMessage } from '../api/client';
 import { Palette } from '../constants/theme';
 import { validateHostIp, validateHostPort } from '../storage/hostStorage';
 import { HostConfig } from '../types';
@@ -77,7 +77,7 @@ export const HostConfigModal: React.FC<HostConfigModalProps> = ({
         message: `Connected: ${res.hostname} (${res.version})`,
       });
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Connection failed';
+      const msg = formatErrorMessage(err, 'Host is disconnected');
       setTestResult({ success: false, message: msg });
     } finally {
       setTesting(false);

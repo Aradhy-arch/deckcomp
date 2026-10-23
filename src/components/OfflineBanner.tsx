@@ -15,7 +15,7 @@ export const OfflineBanner: React.FC<OfflineBannerProps> = ({ onRetry, errorMess
       <View style={styles.textContainer}>
         <Text style={styles.title}>Workstation Unreachable</Text>
         <Text style={styles.subtext} numberOfLines={2}>
-          {errorMessage || 'Cannot establish connection to host daemon.'}
+          {errorMessage || 'Host is disconnected.'}
         </Text>
       </View>
       <TouchableOpacity style={styles.retryButton} onPress={onRetry} activeOpacity={0.7}>

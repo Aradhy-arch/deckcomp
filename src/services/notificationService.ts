@@ -16,7 +16,7 @@ const isExpoGo =
 
 let isInitialized = false;
 let currentHostname = 'Linux PC';
-let feedbackResetTimer: NodeJS.Timeout | null = null;
+let feedbackResetTimer: ReturnType<typeof setTimeout> | null = null;
 let lastProcessedResponseKey = '';
 
 // Lazy-load expo-notifications only in native standalone builds (never in Expo Go)

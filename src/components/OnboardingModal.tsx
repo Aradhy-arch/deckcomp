@@ -29,7 +29,7 @@ import {
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { ApiClient } from '../api/client';
+import { ApiClient, formatErrorMessage } from '../api/client';
 import { Palette } from '../constants/theme';
 import {
   getLocalDeviceUuid,
@@ -167,9 +167,10 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({ visible, onCom
       setCurrentStep('code');
     } catch (err: unknown) {
       setErrorMsg(
-        err instanceof Error
-          ? err.message
-          : 'Could not contact host. Check that deckcomp.service is running (run "deckcomp status").'
+        formatErrorMessage(
+          err,
+          'Could not contact host. Check that deckcomp.service is running (run "deckcomp status").'
+        )
       );
     } finally {
       setInitiating(false);
@@ -203,7 +204,7 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({ visible, onCom
       setPairedDevice(dev);
       setCurrentStep('done');
     } catch (err: unknown) {
-      setErrorMsg(err instanceof Error ? err.message : 'Invalid pairing code.');
+      setErrorMsg(formatErrorMessage(err, 'Invalid pairing code.'));
     } finally {
       setVerifying(false);
     }

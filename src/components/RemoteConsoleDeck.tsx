@@ -9,7 +9,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import { ApiClient } from '../api/client';
+import { ApiClient, formatErrorMessage } from '../api/client';
 import { Palette } from '../constants/theme';
 import { getUserDistro } from '../storage/deviceStorage';
 import { ShellResult } from '../types';
@@ -70,7 +70,7 @@ export const RemoteConsoleDeck: React.FC<RemoteConsoleDeckProps> = ({ apiClient 
     }
 
     if (!apiClient) {
-      setErrorMsg('Workstation offline - connect in Controls tab to run bash commands');
+      setErrorMsg('Host is disconnected');
       return;
     }
 
@@ -81,7 +81,7 @@ export const RemoteConsoleDeck: React.FC<RemoteConsoleDeckProps> = ({ apiClient 
       setHistory((prev) => [{ cmd: targetCmd, res }, ...prev.slice(0, 9)]);
       if (!cmdToRun) setCommand('');
     } catch (err: unknown) {
-      setErrorMsg(err instanceof Error ? err.message : 'Execution failed');
+      setErrorMsg(formatErrorMessage(err, 'Host is disconnected'));
     } finally {
       setRunning(false);
     }

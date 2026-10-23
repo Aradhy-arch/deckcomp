@@ -14,7 +14,7 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
-import { ApiClient } from './src/api/client';
+import { ApiClient, formatErrorMessage } from './src/api/client';
 import { FileDropDeck } from './src/components/FileDropDeck';
 import { FunStuffDeck } from './src/components/FunStuffDeck';
 import { Header } from './src/components/Header';
@@ -88,7 +88,7 @@ function DeckCompMain() {
 
   // Action toast HUD feedback
   const [toastHUD, setToastHUD] = useState<{ message: string; isError?: boolean } | null>(null);
-  const autoDismissTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const autoDismissTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const triggerToastHUD = useCallback((msg: string, isError = false) => {
     setToastHUD({ message: msg, isError });
@@ -102,7 +102,7 @@ function DeckCompMain() {
 
   const isMountedRef = useRef(true);
   const isPollingRef = useRef(false);
-  const pollTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const pollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const apiClientRef = useRef<ApiClient | null>(null);
   const configGenRef = useRef(0);
   const notifiedSharesRef = useRef<Set<string>>(new Set());
@@ -288,7 +288,7 @@ function DeckCompMain() {
     } catch (err: unknown) {
       if (isMountedRef.current && configGenRef.current === currentGen) {
         setNetworkStatus('offline');
-        setErrorMessage(err instanceof Error ? err.message : 'Connection failed');
+        setErrorMessage(formatErrorMessage(err, 'Host is disconnected'));
       }
     } finally {
       isPollingRef.current = false;

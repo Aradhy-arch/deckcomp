@@ -18,7 +18,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import { ApiClient } from '../api/client';
+import { ApiClient, formatErrorMessage } from '../api/client';
 import { Palette } from '../constants/theme';
 import { getLocalDeviceUuid } from '../storage/deviceStorage';
 import { DeviceConfig, DiscoveredHost } from '../types';
@@ -109,9 +109,10 @@ export const PairingModal: React.FC<PairingModalProps> = ({
       setStep('code');
     } catch (err: unknown) {
       setErrorMsg(
-        err instanceof Error
-          ? err.message
-          : 'Could not reach host. Verify deckcomp.service is running on the host (run "deckcomp status").'
+        formatErrorMessage(
+          err,
+          'Could not reach host. Verify deckcomp.service is running on the host (run "deckcomp status").'
+        )
       );
     } finally {
       setInitiating(false);
@@ -145,7 +146,7 @@ export const PairingModal: React.FC<PairingModalProps> = ({
       onPairSuccess(pairedDevice);
       onClose();
     } catch (err: unknown) {
-      setErrorMsg(err instanceof Error ? err.message : 'Pairing verification failed');
+      setErrorMsg(formatErrorMessage(err, 'Pairing verification failed'));
     } finally {
       setVerifying(false);
     }

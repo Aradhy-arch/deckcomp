@@ -27,6 +27,59 @@ export class ApiErrorResponse extends Error {
   }
 }
 
+/**
+ * Detects whether an error represents a socket, network, host-unreachable, or offline condition.
+ */
+export function isHostDisconnectedError(err: unknown): boolean {
+  if (!err) return false;
+  if (err instanceof ApiErrorResponse) {
+    if (err.code === 'HOST_DISCONNECTED' || err.code === 'TIMEOUT' || err.code === 'NETWORK_ERROR') {
+      return true;
+    }
+    return isHostDisconnectedError(err.detail);
+  }
+  const msg = err instanceof Error ? err.message : String(err);
+  return (
+    /socket/i.test(msg) ||
+    /permission denied/i.test(msg) ||
+    /illegal socket/i.test(msg) ||
+    /network request failed/i.test(msg) ||
+    /failed to connect/i.test(msg) ||
+    /connection (?:refused|reset|aborted|closed|failed)/i.test(msg) ||
+    /econnrefused/i.test(msg) ||
+    /ehostunreach/i.test(msg) ||
+    /enetunreach/i.test(msg) ||
+    /econnreset/i.test(msg) ||
+    /eperm/i.test(msg) ||
+    /timed? ?out/i.test(msg) ||
+    /unreachable/i.test(msg) ||
+    /offline/i.test(msg) ||
+    /abort/i.test(msg) ||
+    /software caused connection abort/i.test(msg) ||
+    /broken pipe/i.test(msg) ||
+    /failed to fetch/i.test(msg)
+  );
+}
+
+/**
+ * Normalizes any error message for UI display.
+ * If the host is unreachable, disconnected, or socket permission denied,
+ * returns "Host is disconnected".
+ */
+export function formatErrorMessage(err: unknown, fallback: string = 'Host is disconnected'): string {
+  if (!err) return fallback;
+  if (isHostDisconnectedError(err)) {
+    return 'Host is disconnected';
+  }
+  if (err instanceof ApiErrorResponse) {
+    return err.detail || fallback;
+  }
+  if (err instanceof Error) {
+    return err.message || fallback;
+  }
+  return String(err);
+}
+
 export class ApiClient {
   private baseUrl: string;
   private authToken?: string;
@@ -79,12 +132,12 @@ export class ApiClient {
         throw err;
       }
       if (err instanceof Error) {
-        if (err.name === 'AbortError') {
-          throw new ApiErrorResponse('Request timed out after limit', 'TIMEOUT');
+        if (err.name === 'AbortError' || isHostDisconnectedError(err)) {
+          throw new ApiErrorResponse('Host is disconnected', 'HOST_DISCONNECTED');
         }
         throw new ApiErrorResponse(err.message, 'NETWORK_ERROR');
       }
-      throw new ApiErrorResponse('An unknown network error occurred', 'UNKNOWN');
+      throw new ApiErrorResponse('Host is disconnected', 'HOST_DISCONNECTED');
     }
   }
 
@@ -239,10 +292,13 @@ export class ApiClient {
       if (err instanceof ApiErrorResponse) {
         throw err;
       }
+      if (isHostDisconnectedError(err)) {
+        throw new ApiErrorResponse('Host is disconnected', 'HOST_DISCONNECTED');
+      }
       if (err instanceof Error) {
         throw new ApiErrorResponse(err.message, 'UPLOAD_ERROR');
       }
-      throw new ApiErrorResponse('Unknown upload failure', 'UNKNOWN');
+      throw new ApiErrorResponse('Host is disconnected', 'HOST_DISCONNECTED');
     }
   }
 
@@ -285,42 +341,58 @@ export class ApiClient {
   }
 
   async downloadSharedFileToCache(fileId: string, filename: string): Promise<string> {
-    const downloadUrl = `${this.baseUrl}/share/download/${fileId}`;
-    const safeBasename = filename.replace(/[/\\:*?"<>|]/g, '_') || 'download.bin';
-    const cacheDir = FileSystem.cacheDirectory || '';
-    const targetUri = `${cacheDir.endsWith('/') ? cacheDir : cacheDir + '/'}${Date.now()}_${safeBasename}`;
+    try {
+      const downloadUrl = `${this.baseUrl}/share/download/${fileId}`;
+      const safeBasename = filename.replace(/[/\\:*?"<>|]/g, '_') || 'download.bin';
+      const cacheDir = FileSystem.cacheDirectory || '';
+      const targetUri = `${cacheDir.endsWith('/') ? cacheDir : cacheDir + '/'}${Date.now()}_${safeBasename}`;
 
-    const headers: Record<string, string> = {
-      ...(this.authToken ? { Authorization: `Bearer ${this.authToken}` } : {}),
-    };
+      const headers: Record<string, string> = {
+        ...(this.authToken ? { Authorization: `Bearer ${this.authToken}` } : {}),
+      };
 
-    const downloadRes = await FileSystem.downloadAsync(downloadUrl, targetUri, {
-      headers,
-    });
-    if (downloadRes.status < 200 || downloadRes.status >= 300) {
-      throw new ApiErrorResponse(`Download failed with status ${downloadRes.status}`, `HTTP_${downloadRes.status}`);
+      const downloadRes = await FileSystem.downloadAsync(downloadUrl, targetUri, {
+        headers,
+      });
+      if (downloadRes.status < 200 || downloadRes.status >= 300) {
+        throw new ApiErrorResponse(`Download failed with status ${downloadRes.status}`, `HTTP_${downloadRes.status}`);
+      }
+      return downloadRes.uri;
+    } catch (err: unknown) {
+      if (err instanceof ApiErrorResponse) throw err;
+      if (isHostDisconnectedError(err)) {
+        throw new ApiErrorResponse('Host is disconnected', 'HOST_DISCONNECTED');
+      }
+      throw err;
     }
-    return downloadRes.uri;
   }
 
   async downloadSharedFile(fileId: string, filename: string): Promise<string> {
-    const downloadUrl = `${this.baseUrl}/share/download/${fileId}`;
-    // Sanitize filename to prevent URI-reserved characters or path traversal
-    const safeBasename = filename.replace(/[^a-zA-Z0-9._-]/g, '_') || 'download.bin';
-    const baseDir = FileSystem.documentDirectory || FileSystem.cacheDirectory || '';
-    const targetUri = `${baseDir.endsWith('/') ? baseDir : baseDir + '/'}${safeBasename}`;
+    try {
+      const downloadUrl = `${this.baseUrl}/share/download/${fileId}`;
+      // Sanitize filename to prevent URI-reserved characters or path traversal
+      const safeBasename = filename.replace(/[^a-zA-Z0-9._-]/g, '_') || 'download.bin';
+      const baseDir = FileSystem.documentDirectory || FileSystem.cacheDirectory || '';
+      const targetUri = `${baseDir.endsWith('/') ? baseDir : baseDir + '/'}${safeBasename}`;
 
-    const headers: Record<string, string> = {
-      ...(this.authToken ? { Authorization: `Bearer ${this.authToken}` } : {}),
-    };
+      const headers: Record<string, string> = {
+        ...(this.authToken ? { Authorization: `Bearer ${this.authToken}` } : {}),
+      };
 
-    const downloadRes = await FileSystem.downloadAsync(downloadUrl, targetUri, {
-      headers,
-    });
-    if (downloadRes.status < 200 || downloadRes.status >= 300) {
-      throw new ApiErrorResponse(`Download failed with status ${downloadRes.status}`, `HTTP_${downloadRes.status}`);
+      const downloadRes = await FileSystem.downloadAsync(downloadUrl, targetUri, {
+        headers,
+      });
+      if (downloadRes.status < 200 || downloadRes.status >= 300) {
+        throw new ApiErrorResponse(`Download failed with status ${downloadRes.status}`, `HTTP_${downloadRes.status}`);
+      }
+      return downloadRes.uri;
+    } catch (err: unknown) {
+      if (err instanceof ApiErrorResponse) throw err;
+      if (isHostDisconnectedError(err)) {
+        throw new ApiErrorResponse('Host is disconnected', 'HOST_DISCONNECTED');
+      }
+      throw err;
     }
-    return downloadRes.uri;
   }
 
   async acknowledgeShare(fileId: string): Promise<{ status: string }> {

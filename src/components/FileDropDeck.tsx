@@ -20,7 +20,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import { ApiClient } from '../api/client';
+import { ApiClient, formatErrorMessage } from '../api/client';
 import { Palette } from '../constants/theme';
 import {
   downloadAndSaveSharedFile,
@@ -145,7 +145,7 @@ export const FileDropDeck: React.FC<FileDropDeckProps> = ({ apiClient }) => {
         );
         results.push(dropRes);
       } catch (err: unknown) {
-        errors.push(`${file.name}: ${err instanceof Error ? err.message : 'Upload failed'}`);
+        errors.push(`${file.name}: ${formatErrorMessage(err, 'Host is disconnected')}`);
       }
     }
 
@@ -164,7 +164,10 @@ export const FileDropDeck: React.FC<FileDropDeckProps> = ({ apiClient }) => {
   };
 
   const handleDownloadSingle = async (item: SharedFileItem) => {
-    if (!apiClient) return;
+    if (!apiClient) {
+      setErrorMsg('Host is disconnected');
+      return;
+    }
     setDownloadingId(item.id);
     setErrorMsg(null);
     try {
@@ -175,14 +178,17 @@ export const FileDropDeck: React.FC<FileDropDeckProps> = ({ apiClient }) => {
       const uri = await getSavedDownloadDirectoryUri();
       setDownloadFolderUri(uri);
     } catch (err: unknown) {
-      setErrorMsg(err instanceof Error ? err.message : 'Download failed');
+      setErrorMsg(formatErrorMessage(err, 'Host is disconnected'));
     } finally {
       setDownloadingId(null);
     }
   };
 
   const handleDownloadAllFromHost = async () => {
-    if (pendingShares.length === 0 || !apiClient) return;
+    if (pendingShares.length === 0 || !apiClient) {
+      if (!apiClient) setErrorMsg('Host is disconnected');
+      return;
+    }
     setDownloadingAll(true);
     setErrorMsg(null);
 
@@ -206,7 +212,7 @@ export const FileDropDeck: React.FC<FileDropDeckProps> = ({ apiClient }) => {
         lastSavedPath = res.savedPath;
         setPendingShares((prev) => prev.filter((p) => p.id !== item.id));
       } catch (err: unknown) {
-        errors.push(`${item.filename}: ${err instanceof Error ? err.message : 'Download failed'}`);
+        errors.push(`${item.filename}: ${formatErrorMessage(err, 'Host is disconnected')}`);
       }
     }
 
