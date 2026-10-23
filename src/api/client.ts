@@ -271,9 +271,36 @@ export class ApiClient {
     });
   }
 
+  getBaseUrl(): string {
+    return this.baseUrl;
+  }
+
+  getAuthToken(): string | undefined {
+    return this.authToken;
+  }
+
   // 10. Host-to-Mobile Sharing (Outbox)
   async listPendingShares(): Promise<SharedFileItem[]> {
     return this.request<SharedFileItem[]>('/share/pending');
+  }
+
+  async downloadSharedFileToCache(fileId: string, filename: string): Promise<string> {
+    const downloadUrl = `${this.baseUrl}/share/download/${fileId}`;
+    const safeBasename = filename.replace(/[/\\:*?"<>|]/g, '_') || 'download.bin';
+    const cacheDir = FileSystem.cacheDirectory || '';
+    const targetUri = `${cacheDir.endsWith('/') ? cacheDir : cacheDir + '/'}${Date.now()}_${safeBasename}`;
+
+    const headers: Record<string, string> = {
+      ...(this.authToken ? { Authorization: `Bearer ${this.authToken}` } : {}),
+    };
+
+    const downloadRes = await FileSystem.downloadAsync(downloadUrl, targetUri, {
+      headers,
+    });
+    if (downloadRes.status < 200 || downloadRes.status >= 300) {
+      throw new ApiErrorResponse(`Download failed with status ${downloadRes.status}`, `HTTP_${downloadRes.status}`);
+    }
+    return downloadRes.uri;
   }
 
   async downloadSharedFile(fileId: string, filename: string): Promise<string> {

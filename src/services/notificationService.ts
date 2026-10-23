@@ -5,6 +5,7 @@ import { ApiClient } from '../api/client';
 import { getActiveDeviceId, loadDevices } from '../storage/deviceStorage';
 
 const SILENT_CHANNEL_ID = 'deckcomp-silent-service-v2';
+const INCOMING_FILES_CHANNEL_ID = 'deckcomp-incoming-files-v1';
 const NOTIFICATION_ID = 'deck_persistent_service_notification';
 const CATEGORY_ID = 'clipboard_quick_actions';
 
@@ -118,7 +119,8 @@ export async function executeClipboardAction(
 
 export async function initNotificationService(
   apiClientProvider: () => ApiClient | null,
-  onActionTriggered?: (actionId: string, result: { success: boolean; message: string }) => void
+  onActionTriggered?: (actionId: string, result: { success: boolean; message: string }) => void,
+  onIncomingFileTapped?: (fileId: string) => void
 ) {
   if (Platform.OS !== 'android' || isExpoGo) return;
   if (isInitialized) return;
@@ -128,16 +130,21 @@ export async function initNotificationService(
   if (!Notifications) return;
 
   try {
-    // Configure notification handler safely for silent operation
+    // Configure notification handler safely: alerting for incoming files, silent for status
     Notifications.setNotificationHandler({
-      handleNotification: async () => ({
-        shouldShowAlert: false,
-        shouldShowBanner: false,
-        shouldShowList: true,
-        shouldPlaySound: false,
-        shouldSetBadge: false,
-        priority: Notifications.AndroidNotificationPriority.MIN,
-      }),
+      handleNotification: async (notif) => {
+        const isIncomingFile = notif?.request?.content?.data?.type === 'incoming_file';
+        return {
+          shouldShowAlert: isIncomingFile,
+          shouldShowBanner: isIncomingFile,
+          shouldShowList: true,
+          shouldPlaySound: isIncomingFile,
+          shouldSetBadge: false,
+          priority: isIncomingFile
+            ? Notifications.AndroidNotificationPriority.HIGH
+            : Notifications.AndroidNotificationPriority.MIN,
+        };
+      },
     });
 
     // 1. Request notification permissions
@@ -156,7 +163,6 @@ export async function initNotificationService(
     } catch {}
 
     // 2. Set up truly silent MIN importance notification channel on Android
-    // Android puts channels with MIN/LOW importance in the "Silent" category (alert switches hidden)
     await Notifications.setNotificationChannelAsync(SILENT_CHANNEL_ID, {
       name: 'DeckComp Silent Status',
       description: 'Silent persistent status and background clipboard controls',
@@ -168,8 +174,19 @@ export async function initNotificationService(
       showBadge: false,
     });
 
+    // 2b. Set up HIGH importance alerting channel for incoming files from PC
+    await Notifications.setNotificationChannelAsync(INCOMING_FILES_CHANNEL_ID, {
+      name: 'DeckComp File Transfers',
+      description: 'Alerts when your computer sends files to your phone',
+      importance: Notifications.AndroidImportance.HIGH,
+      enableVibrate: true,
+      vibrationPattern: [0, 250, 250, 250],
+      sound: 'default',
+      lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
+      showBadge: true,
+    });
+
     // 3. Define Quick Action Buttons with opensAppToForeground: false
-    // Strictly background action: will NOT launch or open the application
     await Notifications.setNotificationCategoryAsync(CATEGORY_ID, [
       {
         identifier: 'action_pull_clip',
@@ -187,8 +204,14 @@ export async function initNotificationService(
       },
     ]);
 
-    // 4. Handle button taps in background without opening the app
+    // 4. Handle button taps & notification taps
     Notifications.addNotificationResponseReceivedListener(async (response) => {
+      const notifData = response.notification?.request?.content?.data;
+      if (notifData && notifData.type === 'incoming_file') {
+        onIncomingFileTapped?.(String(notifData.fileId || ''));
+        return;
+      }
+
       const actionId = response.actionIdentifier;
       if (actionId !== 'action_push_clip' && actionId !== 'action_pull_clip') {
         return;
@@ -283,4 +306,36 @@ export async function dismissPersistentNotification() {
   try {
     await Notifications.dismissNotificationAsync(NOTIFICATION_ID);
   } catch {}
+}
+
+export async function notifyIncomingFileFromHost(
+  share: { id: string; filename: string; size_bytes: number },
+  hostname?: string
+) {
+  if (isExpoGo || Platform.OS !== 'android') return;
+  const Notifications = getNotificationsModule();
+  if (!Notifications) return;
+
+  const sizeKb = Math.max(1, Math.round(share.size_bytes / 1024));
+  const sizeStr = sizeKb < 1024 ? `${sizeKb} KB` : `${(sizeKb / 1024).toFixed(1)} MB`;
+
+  try {
+    await Notifications.scheduleNotificationAsync({
+      identifier: `incoming_file_${share.id}`,
+      content: {
+        title: 'DeckComp • File from Workstation',
+        body: `${hostname || 'PC'} is sending "${share.filename}" (${sizeStr}). Tap to receive.`,
+        data: {
+          type: 'incoming_file',
+          fileId: share.id,
+          filename: share.filename,
+        },
+        sound: true,
+        priority: Notifications.AndroidNotificationPriority.HIGH,
+      },
+      trigger: null,
+    });
+  } catch (err) {
+    console.warn('[NotificationService] Failed to schedule incoming file alert:', err);
+  }
 }

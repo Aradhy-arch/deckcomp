@@ -31,6 +31,7 @@ import { ToastHUD } from './src/components/ToastHUD';
 import { Palette } from './src/constants/theme';
 import {
   initNotificationService,
+  notifyIncomingFileFromHost,
   showPersistentNotification,
   updateNotificationFeedback,
 } from './src/services/notificationService';
@@ -104,6 +105,7 @@ function DeckCompMain() {
   const pollTimerRef = useRef<NodeJS.Timeout | null>(null);
   const apiClientRef = useRef<ApiClient | null>(null);
   const configGenRef = useRef(0);
+  const notifiedSharesRef = useRef<Set<string>>(new Set());
 
   // Initialize Host Config from AsyncStorage
   useEffect(() => {
@@ -135,8 +137,16 @@ function DeckCompMain() {
           setOnboardingVisible(true);
         }
 
-        // Initialize persistent silent notification listener (background only)
-        initNotificationService(() => apiClientRef.current);
+        // Initialize persistent silent notification listener (background only) + incoming file alerts
+        initNotificationService(
+          () => apiClientRef.current,
+          undefined,
+          () => {
+            if (isMountedRef.current) {
+              setActiveTab('drop');
+            }
+          }
+        );
       } catch {
         if (isMountedRef.current) {
           setHostAddressLoaded(true);
@@ -243,10 +253,11 @@ function DeckCompMain() {
       setErrorMessage(null);
       showPersistentNotification(health.hostname || currentDevice.name);
 
-      // 2. Fetch Telemetry & Media independently
-      const [telemetryRes, mediaRes] = await Promise.allSettled([
+      // 2. Fetch Telemetry, Media & Pending Outbox Shares independently
+      const [telemetryRes, mediaRes, sharesRes] = await Promise.allSettled([
         client.getHostTelemetry(),
         client.getMediaStatus(),
+        client.listPendingShares(),
       ]);
 
       if (!isMountedRef.current || configGenRef.current !== currentGen) return;
@@ -256,6 +267,14 @@ function DeckCompMain() {
       }
       if (mediaRes.status === 'fulfilled') {
         setMediaStatus(mediaRes.value);
+      }
+      if (sharesRes.status === 'fulfilled' && Array.isArray(sharesRes.value)) {
+        for (const share of sharesRes.value) {
+          if (!notifiedSharesRef.current.has(share.id)) {
+            notifiedSharesRef.current.add(share.id);
+            notifyIncomingFileFromHost(share, health.hostname || currentDevice.name);
+          }
+        }
       }
 
       // 3. Sync client battery if available

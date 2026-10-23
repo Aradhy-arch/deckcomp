@@ -22,6 +22,12 @@ import {
 } from 'react-native';
 import { ApiClient } from '../api/client';
 import { Palette } from '../constants/theme';
+import {
+  downloadAndSaveSharedFile,
+  formatFriendlyDirName,
+  getSavedDownloadDirectoryUri,
+  promptSelectDownloadDirectory,
+} from '../services/fileReceiveService';
 import { DropResult, SharedFileItem } from '../types';
 
 interface FileDropDeckProps {
@@ -51,6 +57,18 @@ export const FileDropDeck: React.FC<FileDropDeckProps> = ({ apiClient }) => {
     filename: string;
   } | null>(null);
   const [downloadSuccess, setDownloadSuccess] = useState<string | null>(null);
+  const [downloadFolderUri, setDownloadFolderUri] = useState<string | null>(null);
+
+  useEffect(() => {
+    getSavedDownloadDirectoryUri().then(setDownloadFolderUri);
+  }, []);
+
+  const handlePickDownloadFolder = async () => {
+    const uri = await promptSelectDownloadDirectory();
+    if (uri) {
+      setDownloadFolderUri(uri);
+    }
+  };
 
   const fetchPendingShares = async () => {
     if (!apiClient) return;
@@ -150,11 +168,12 @@ export const FileDropDeck: React.FC<FileDropDeckProps> = ({ apiClient }) => {
     setDownloadingId(item.id);
     setErrorMsg(null);
     try {
-      await apiClient.downloadSharedFile(item.id, item.filename);
-      await apiClient.acknowledgeShare(item.id);
+      const res = await downloadAndSaveSharedFile(apiClient, item);
       setPendingShares((prev) => prev.filter((p) => p.id !== item.id));
-      setDownloadSuccess(`Downloaded "${item.filename}"`);
-      setTimeout(() => setDownloadSuccess(null), 4000);
+      setDownloadSuccess(`Saved "${item.filename}" to ${res.savedPath}`);
+      setTimeout(() => setDownloadSuccess(null), 4500);
+      const uri = await getSavedDownloadDirectoryUri();
+      setDownloadFolderUri(uri);
     } catch (err: unknown) {
       setErrorMsg(err instanceof Error ? err.message : 'Download failed');
     } finally {
@@ -169,6 +188,7 @@ export const FileDropDeck: React.FC<FileDropDeckProps> = ({ apiClient }) => {
 
     const total = pendingShares.length;
     let downloadedCount = 0;
+    let lastSavedPath = 'Downloads';
     const errors: string[] = [];
     const remaining = [...pendingShares];
 
@@ -181,9 +201,9 @@ export const FileDropDeck: React.FC<FileDropDeckProps> = ({ apiClient }) => {
       });
 
       try {
-        await apiClient.downloadSharedFile(item.id, item.filename);
-        await apiClient.acknowledgeShare(item.id);
+        const res = await downloadAndSaveSharedFile(apiClient, item);
         downloadedCount++;
+        lastSavedPath = res.savedPath;
         setPendingShares((prev) => prev.filter((p) => p.id !== item.id));
       } catch (err: unknown) {
         errors.push(`${item.filename}: ${err instanceof Error ? err.message : 'Download failed'}`);
@@ -195,9 +215,11 @@ export const FileDropDeck: React.FC<FileDropDeckProps> = ({ apiClient }) => {
 
     if (downloadedCount > 0) {
       setDownloadSuccess(
-        `Downloaded ${downloadedCount} file${downloadedCount > 1 ? 's' : ''} to phone`
+        `Saved ${downloadedCount} file${downloadedCount > 1 ? 's' : ''} to ${lastSavedPath}`
       );
       setTimeout(() => setDownloadSuccess(null), 4500);
+      const uri = await getSavedDownloadDirectoryUri();
+      setDownloadFolderUri(uri);
     }
 
     if (errors.length > 0) {
@@ -391,6 +413,22 @@ export const FileDropDeck: React.FC<FileDropDeckProps> = ({ apiClient }) => {
               )}
             </TouchableOpacity>
           </View>
+        </View>
+
+        {/* Destination Folder Bar */}
+        <View style={styles.folderRow}>
+          <Text style={styles.folderRowText} numberOfLines={1}>
+            Save to: <Text style={styles.folderHighlight}>{formatFriendlyDirName(downloadFolderUri)}</Text>
+          </Text>
+          <TouchableOpacity
+            style={styles.folderChangeBtn}
+            onPress={handlePickDownloadFolder}
+            activeOpacity={0.7}
+          >
+            <Text style={styles.folderChangeBtnText}>
+              {downloadFolderUri ? 'Change' : 'Set Folder'}
+            </Text>
+          </TouchableOpacity>
         </View>
 
         {downloadSuccess && (
@@ -829,5 +867,39 @@ const styles = StyleSheet.create({
     color: Palette.red,
     fontSize: 12,
     textAlign: 'center',
+  },
+  folderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    backgroundColor: Palette.surface0,
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    marginTop: 8,
+    marginBottom: 4,
+    borderWidth: 1,
+    borderColor: Palette.surface1,
+  },
+  folderRowText: {
+    fontSize: 11,
+    color: Palette.subtext0,
+    flex: 1,
+  },
+  folderHighlight: {
+    color: Palette.mauve,
+    fontWeight: '700',
+  },
+  folderChangeBtn: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    backgroundColor: Palette.surface1,
+    borderRadius: 6,
+    marginLeft: 8,
+  },
+  folderChangeBtnText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: Palette.text,
   },
 });
