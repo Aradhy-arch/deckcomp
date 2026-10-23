@@ -146,7 +146,7 @@ function DeckCompMain() {
               setActiveTab('drop');
             }
           }
-        );
+        ).catch(() => {});
       } catch {
         if (isMountedRef.current) {
           setHostAddressLoaded(true);

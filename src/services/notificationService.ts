@@ -1,5 +1,6 @@
 import * as Clipboard from 'expo-clipboard';
 import Constants, { ExecutionEnvironment } from 'expo-constants';
+import { isRunningInExpoGo } from 'expo';
 import { Platform, Vibration } from 'react-native';
 import { ApiClient } from '../api/client';
 import { getActiveDeviceId, loadDevices } from '../storage/deviceStorage';
@@ -9,20 +10,42 @@ const INCOMING_FILES_CHANNEL_ID = 'deckcomp-incoming-files-v1';
 const NOTIFICATION_ID = 'deck_persistent_service_notification';
 const CATEGORY_ID = 'clipboard_quick_actions';
 
-// Check if running inside Expo Go client where push/topic notification native modules are stripped
-const isExpoGo =
-  Constants.appOwnership === 'expo' ||
-  Constants.executionEnvironment === ExecutionEnvironment.StoreClient;
+// Check if notifications are supported in current environment (disabled in Expo Go or non-Android)
+export function isNotificationsSupported(): boolean {
+  if (Platform.OS !== 'android') return false;
+  try {
+    if (isRunningInExpoGo()) return false;
+  } catch {}
+  try {
+    if (
+      Constants.appOwnership === 'expo' ||
+      Constants.executionEnvironment === ExecutionEnvironment.StoreClient
+    ) {
+      return false;
+    }
+  } catch {}
+  return true;
+}
 
 let isInitialized = false;
 let currentHostname = 'Linux PC';
 let feedbackResetTimer: ReturnType<typeof setTimeout> | null = null;
 let lastProcessedResponseKey = '';
 
-// Lazy-load expo-notifications only in native standalone builds (never in Expo Go)
+// Lazy-load expo-notifications only in native builds with safety guards
 function getNotificationsModule(): typeof import('expo-notifications') | null {
-  if (isExpoGo || Platform.OS !== 'android') return null;
+  if (!isNotificationsSupported()) return null;
   try {
+    // Polyfill ExpoTopicSubscriptionModule if missing in current runtime
+    const g = globalThis as any;
+    if (g.expo?.modules && !g.expo.modules.ExpoTopicSubscriptionModule) {
+      g.expo.modules.ExpoTopicSubscriptionModule = {
+        subscribeToTopicAsync: async () => {},
+        unsubscribeFromTopicAsync: async () => {},
+        addListener: () => {},
+        removeListeners: () => {},
+      };
+    }
     return require('expo-notifications');
   } catch (err) {
     console.warn('[NotificationService] Native notifications module not available:', err);
@@ -122,7 +145,7 @@ export async function initNotificationService(
   onActionTriggered?: (actionId: string, result: { success: boolean; message: string }) => void,
   onIncomingFileTapped?: (fileId: string) => void
 ) {
-  if (Platform.OS !== 'android' || isExpoGo) return;
+  if (!isNotificationsSupported()) return;
   if (isInitialized) return;
   isInitialized = true;
 
@@ -267,7 +290,7 @@ export async function updateNotificationFeedback(feedbackMsg: string) {
 }
 
 export async function showPersistentNotification(hostname: string = 'Linux PC') {
-  if (Platform.OS !== 'android' || isExpoGo) return;
+  if (!isNotificationsSupported()) return;
   const Notifications = getNotificationsModule();
   if (!Notifications) return;
 
@@ -295,7 +318,7 @@ export async function showPersistentNotification(hostname: string = 'Linux PC') 
 }
 
 export async function dismissPersistentNotification() {
-  if (isExpoGo) return;
+  if (!isNotificationsSupported()) return;
   const Notifications = getNotificationsModule();
   if (!Notifications) return;
 
@@ -312,7 +335,7 @@ export async function notifyIncomingFileFromHost(
   share: { id: string; filename: string; size_bytes: number },
   hostname?: string
 ) {
-  if (isExpoGo || Platform.OS !== 'android') return;
+  if (!isNotificationsSupported()) return;
   const Notifications = getNotificationsModule();
   if (!Notifications) return;
 
