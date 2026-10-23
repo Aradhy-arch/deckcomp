@@ -105,9 +105,17 @@ class FileDropService:
         if notify_bin:
             try:
                 env = resolve_graphical_env()
-                notification_msg = f"Saved {final_name} ({size_str}) to ~/Downloads"
+            except Exception:
+                env = os.environ.copy()
+                uid = os.getuid()
+                env.setdefault("XDG_RUNTIME_DIR", f"/run/user/{uid}")
+                env.setdefault("DBUS_SESSION_BUS_ADDRESS", f"unix:path=/run/user/{uid}/bus")
+                env.setdefault("DISPLAY", ":0")
+
+            try:
+                notification_msg = f"Saved '{final_name}' ({size_str}) from phone to ~/Downloads"
                 await run_async_subprocess(
-                    [notify_bin, "-a", "DeckComp", "-i", "document-save", "File Received", notification_msg],
+                    [notify_bin, "-u", "normal", "-a", "DeckComp", "-i", "document-save", "DeckComp • File Received", notification_msg],
                     timeout_sec=3.0,
                     env=env
                 )
