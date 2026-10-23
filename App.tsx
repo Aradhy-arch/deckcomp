@@ -1,7 +1,7 @@
 import * as Battery from 'expo-battery';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
-import { SlidersHorizontal, Sparkles, Terminal, Upload } from 'lucide-react-native';
+import { LayoutGrid, SlidersHorizontal, Terminal, Upload } from 'lucide-react-native';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   AppState,
@@ -503,7 +503,7 @@ function DeckCompMain() {
             onPress={() => setActiveTab('fun')}
             activeOpacity={0.7}
           >
-            <Sparkles
+            <LayoutGrid
               size={19}
               color={activeTab === 'fun' ? Palette.mauve : Palette.subtext0}
             />
@@ -513,7 +513,7 @@ function DeckCompMain() {
                 activeTab === 'fun' ? styles.activeTabLabel : null,
               ]}
             >
-              Fun Stuff
+              Visuals
             </Text>
           </TouchableOpacity>
         )}
@@ -636,9 +636,7 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     gap: 4,
   },
-  activeTabItem: {
-    backgroundColor: Palette.surface0,
-  },
+  activeTabItem: {},
   tabLabel: {
     fontSize: 11,
     fontWeight: '600',

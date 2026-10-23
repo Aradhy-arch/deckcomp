@@ -48,7 +48,7 @@ const PALETTES = {
     halo: Palette.surface1,
   },
   party: {
-    name: 'Party 🪩',
+    name: 'Cycle',
     core: Palette.flamingo,
     inner: Palette.yellow,
     outer: Palette.sky,
@@ -289,18 +289,18 @@ export const TerminalVisualizer: React.FC<TerminalVisualizerProps> = ({ app, onC
       <View style={styles.topBar}>
         <View style={styles.titleBadge}>
           {app === 'lavat' ? (
-            <Flame size={13} color={Palette.peach} />
+            <Flame size={12} color={Palette.mauve} />
           ) : (
-            <Sparkles size={13} color={Palette.green} />
+            <Sparkles size={12} color={Palette.green} />
           )}
           <Text style={styles.titleText}>
-            {app === 'lavat' ? 'LAVAT FLUID VISUALIZER' : 'CMATRIX DIGITAL STREAM'}
+            {app === 'lavat' ? 'lavat' : 'cmatrix'}
           </Text>
         </View>
 
         <TouchableOpacity style={styles.stopBtn} onPress={onClose} activeOpacity={0.7}>
-          <X size={12} color={Palette.red} />
-          <Text style={styles.stopBtnText}>Stop (Ctrl+C)</Text>
+          <X size={12} color={Palette.overlay1} />
+          <Text style={styles.stopBtnText}>Stop</Text>
         </TouchableOpacity>
       </View>
 
@@ -316,7 +316,7 @@ export const TerminalVisualizer: React.FC<TerminalVisualizerProps> = ({ app, onC
             }}
             activeOpacity={0.7}
           >
-            <Text style={styles.modChipText}>Palette: {PALETTES[paletteMode].name}</Text>
+            <Text style={styles.modChipText}>{PALETTES[paletteMode].name}</Text>
           </TouchableOpacity>
 
           <TouchableOpacity
@@ -325,7 +325,7 @@ export const TerminalVisualizer: React.FC<TerminalVisualizerProps> = ({ app, onC
             activeOpacity={0.7}
           >
             <Text style={[styles.modChipText, convectionMode && styles.modChipTextActive]}>
-              {convectionMode ? '♨ Convection' : '● Bounce'}
+              {convectionMode ? 'Buoyancy' : 'Bounce'}
             </Text>
           </TouchableOpacity>
         </View>

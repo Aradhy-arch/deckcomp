@@ -233,8 +233,8 @@ export const FunStuffDeck: React.FC<FunStuffDeckProps> = ({ apiClient }) => {
       {/* Header with Title and Add Button */}
       <View style={styles.headerRow}>
         <View>
-          <Text style={styles.sectionHeader}>FUN PRESETS & EYE-CANDY</Text>
-          <Text style={styles.sectionSub}>Custom terminal visualizers & launchers</Text>
+          <Text style={styles.sectionHeader}>Visuals &amp; Launchers</Text>
+          <Text style={styles.sectionSub}>Quick desktop visualizers and app launchers</Text>
         </View>
         <View style={styles.headerActions}>
           <TouchableOpacity
@@ -325,7 +325,7 @@ export const FunStuffDeck: React.FC<FunStuffDeckProps> = ({ apiClient }) => {
             <View style={styles.modalHeader}>
               <View style={styles.modalHeaderTitleRow}>
                 <Sparkles size={18} color={Palette.mauve} />
-                <Text style={styles.modalTitle}>New Fun Preset</Text>
+                <Text style={styles.modalTitle}>New Preset</Text>
               </View>
               <TouchableOpacity onPress={() => setModalVisible(false)}>
                 <X size={20} color={Palette.subtext0} />

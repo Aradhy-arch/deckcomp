@@ -1,6 +1,5 @@
 import {
   Minus,
-  Music,
   Pause,
   Play,
   Plus,
@@ -66,17 +65,11 @@ export const MediaDeck: React.FC<MediaDeckProps> = ({
       <View style={styles.card}>
         {/* Track Metadata */}
         <View style={styles.trackSection}>
-          <View style={styles.playerTag}>
-            <Music size={10} color={Palette.mauve} style={{ marginRight: 4 }} />
-            <Text style={styles.playerTagText}>
-              {mediaStatus?.player ? mediaStatus.player : 'MPRIS'}
-            </Text>
-          </View>
           <Text style={styles.trackTitle} numberOfLines={1}>
             {mediaStatus?.title || 'No Media Playing'}
           </Text>
           <Text style={styles.trackArtist} numberOfLines={1}>
-            {mediaStatus?.artist || (mediaStatus?.player ? 'Active Player' : 'Playback Idle')}
+            {mediaStatus?.artist || (mediaStatus?.player ? mediaStatus.player : 'Playback Idle')}
           </Text>
         </View>
 

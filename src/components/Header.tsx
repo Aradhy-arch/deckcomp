@@ -59,12 +59,11 @@ export const Header: React.FC<HeaderProps> = ({
             style={styles.logoImage}
             resizeMode="cover"
           />
-          <Text style={styles.brandTitle}>Deck</Text>
-          <Text style={styles.brandAccent}>Comp</Text>
+          <Text style={styles.brandTitle}>DeckComp</Text>
         </View>
-        <View style={styles.statusBadge}>
+        <View style={styles.statusIndicator}>
           <View style={[styles.statusDot, { backgroundColor: getStatusColor() }]} />
-          <Text style={[styles.statusText, { color: getStatusColor() }]}>
+          <Text style={styles.statusText}>
             {getStatusLabel()}
           </Text>
         </View>
@@ -112,45 +111,33 @@ const styles = StyleSheet.create({
     borderRadius: 6,
   },
   brandTitle: {
-    fontSize: 18,
-    fontWeight: '800',
+    fontSize: 17,
+    fontWeight: '700',
     color: Palette.text,
     letterSpacing: -0.3,
   },
-  brandAccent: {
-    fontSize: 18,
-    fontWeight: '800',
-    color: Palette.mauve,
-    letterSpacing: -0.3,
-  },
-  statusBadge: {
+  statusIndicator: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: Palette.surface0,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: Palette.surface1,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    gap: 5,
   },
   statusDot: {
     width: 6,
     height: 6,
     borderRadius: 3,
-    marginRight: 5,
   },
   statusText: {
-    fontSize: 11,
-    fontWeight: '600',
+    fontSize: 12,
+    fontWeight: '500',
+    color: Palette.subtext0,
   },
   configBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: Palette.surface0,
+    width: 34,
+    height: 34,
+    borderRadius: 8,
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: Palette.surface1,
   },
 });

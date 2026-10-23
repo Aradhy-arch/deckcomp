@@ -38,14 +38,11 @@ export const TelemetryDeck: React.FC<TelemetryDeckProps> = ({
         <View style={styles.deviceCol}>
           <View style={styles.headerRow}>
             <View style={styles.labelRow}>
-              <Laptop size={12} color={Palette.subtext0} style={styles.headerIcon} />
-              <Text style={styles.deviceLabel}>WORKSTATION</Text>
+              <Laptop size={13} color={Palette.overlay1} style={styles.headerIcon} />
+              <Text style={styles.deviceLabel}>Workstation</Text>
             </View>
             {isHostCharging && (
-              <View style={[styles.badge, { backgroundColor: Palette.surface1 }]}>
-                <Zap size={9} color={Palette.green} style={{ marginRight: 2 }} />
-                <Text style={[styles.badgeText, { color: Palette.green }]}>CHARGING</Text>
-              </View>
+              <Zap size={12} color={Palette.green} />
             )}
           </View>
           <Text style={styles.percentText}>{hostPercent}</Text>
@@ -61,14 +58,11 @@ export const TelemetryDeck: React.FC<TelemetryDeckProps> = ({
         <View style={styles.deviceCol}>
           <View style={styles.headerRow}>
             <View style={styles.labelRow}>
-              <Smartphone size={12} color={Palette.subtext0} style={styles.headerIcon} />
-              <Text style={styles.deviceLabel}>PHONE</Text>
+              <Smartphone size={13} color={Palette.overlay1} style={styles.headerIcon} />
+              <Text style={styles.deviceLabel}>Phone</Text>
             </View>
             {isPhoneCharging && (
-              <View style={[styles.badge, { backgroundColor: Palette.surface1 }]}>
-                <Zap size={9} color={Palette.green} style={{ marginRight: 2 }} />
-                <Text style={[styles.badgeText, { color: Palette.green }]}>CHARGING</Text>
-              </View>
+              <Zap size={12} color={Palette.green} />
             )}
           </View>
           <Text style={styles.percentText}>{phonePercent}</Text>
@@ -119,28 +113,15 @@ const styles = StyleSheet.create({
     marginRight: 4,
   },
   deviceLabel: {
-    fontSize: 10,
-    fontWeight: '700',
+    fontSize: 12,
+    fontWeight: '600',
     color: Palette.subtext0,
-    letterSpacing: 0.8,
-  },
-  badge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 5,
-    paddingVertical: 2,
-    borderRadius: 4,
-  },
-  badgeText: {
-    fontSize: 8,
-    fontWeight: '800',
-    letterSpacing: 0.4,
   },
   percentText: {
-    fontSize: 22,
-    fontWeight: '800',
+    fontSize: 20,
+    fontWeight: '700',
     color: Palette.text,
-    letterSpacing: -0.5,
+    letterSpacing: -0.3,
   },
   detailText: {
     fontSize: 11,

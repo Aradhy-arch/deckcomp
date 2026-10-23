@@ -27,7 +27,7 @@ export const RemoteConsoleDeck: React.FC<RemoteConsoleDeckProps> = ({ apiClient 
   const [activeVisualizer, setActiveVisualizer] = useState<'lavat' | 'cmatrix' | null>(null);
   const [distro, setDistro] = useState('Linux');
 
-  const presets = ['lavat', 'cmatrix', 'uptime -p', 'free -h', 'uname -r', 'hyprctl activewindow -j'];
+  const presets = ['uptime -p', 'free -h', 'uname -r', 'hyprctl activewindow -j', 'lavat'];
 
   useEffect(() => {
     getUserDistro().then((d) => {

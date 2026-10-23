@@ -106,7 +106,7 @@ export const QuickActionsDeck: React.FC<QuickActionsDeckProps> = ({ apiClient })
 
   return (
     <View style={styles.container}>
-      <Text style={styles.sectionHeader}>QUICK ACTIONS</Text>
+      <Text style={styles.sectionHeader}>Quick Actions</Text>
 
       {/* Balanced 2x2 Action Grid */}
       <View style={styles.grid}>
@@ -117,15 +117,15 @@ export const QuickActionsDeck: React.FC<QuickActionsDeckProps> = ({ apiClient })
           disabled={activeAction !== null || !apiClient}
           activeOpacity={0.7}
         >
-          <View style={styles.iconCircle}>
+          <View style={styles.tileIconBox}>
             {activeAction === 'push_clip' ? (
-              <ActivityIndicator size="small" color={Palette.blue} />
+              <ActivityIndicator size="small" color={Palette.mauve} />
             ) : (
-              <ClipboardCopy size={18} color={Palette.blue} />
+              <ClipboardCopy size={20} color={Palette.mauve} />
             )}
           </View>
           <Text style={styles.tileTitle}>Push Clip</Text>
-          <Text style={styles.tileSub}>Phone → Host</Text>
+          <Text style={styles.tileSub}>Phone → PC</Text>
         </TouchableOpacity>
 
         {/* Pull Clipboard */}
@@ -135,15 +135,15 @@ export const QuickActionsDeck: React.FC<QuickActionsDeckProps> = ({ apiClient })
           disabled={activeAction !== null || !apiClient}
           activeOpacity={0.7}
         >
-          <View style={styles.iconCircle}>
+          <View style={styles.tileIconBox}>
             {activeAction === 'pull_clip' ? (
-              <ActivityIndicator size="small" color={Palette.lavender} />
+              <ActivityIndicator size="small" color={Palette.mauve} />
             ) : (
-              <ClipboardPaste size={18} color={Palette.lavender} />
+              <ClipboardPaste size={20} color={Palette.mauve} />
             )}
           </View>
           <Text style={styles.tileTitle}>Pull Clip</Text>
-          <Text style={styles.tileSub}>Host → Phone</Text>
+          <Text style={styles.tileSub}>PC → Phone</Text>
         </TouchableOpacity>
 
         {/* Lock Screen */}
@@ -153,11 +153,11 @@ export const QuickActionsDeck: React.FC<QuickActionsDeckProps> = ({ apiClient })
           disabled={activeAction !== null || !apiClient}
           activeOpacity={0.7}
         >
-          <View style={styles.iconCircle}>
+          <View style={styles.tileIconBox}>
             {activeAction === 'lock' ? (
               <ActivityIndicator size="small" color={Palette.mauve} />
             ) : (
-              <Lock size={18} color={Palette.mauve} />
+              <Lock size={20} color={Palette.mauve} />
             )}
           </View>
           <Text style={styles.tileTitle}>Lock Session</Text>
@@ -170,8 +170,8 @@ export const QuickActionsDeck: React.FC<QuickActionsDeckProps> = ({ apiClient })
           onPress={() => setShowPower(!showPower)}
           activeOpacity={0.7}
         >
-          <View style={styles.iconCircle}>
-            <Power size={18} color={Palette.red} />
+          <View style={styles.tileIconBox}>
+            <Power size={20} color={showPower ? Palette.red : Palette.subtext0} />
           </View>
           <Text style={styles.tileTitle}>Power</Text>
           <Text style={styles.tileSub}>{showPower ? 'Hide options' : 'Options...'}</Text>
@@ -238,10 +238,9 @@ const styles = StyleSheet.create({
     marginTop: 14,
   },
   sectionHeader: {
-    fontSize: 10,
-    fontWeight: '700',
+    fontSize: 12,
+    fontWeight: '600',
     color: Palette.subtext0,
-    letterSpacing: 0.8,
     marginBottom: 8,
   },
   grid: {
@@ -254,7 +253,7 @@ const styles = StyleSheet.create({
     width: '48.5%',
     backgroundColor: Palette.surface0,
     borderRadius: 12,
-    paddingVertical: 14,
+    paddingVertical: 12,
     paddingHorizontal: 12,
     alignItems: 'center',
     borderWidth: 1,
@@ -264,22 +263,18 @@ const styles = StyleSheet.create({
     borderColor: Palette.mauve,
     backgroundColor: Palette.surface1,
   },
-  iconCircle: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: Palette.surface1,
+  tileIconBox: {
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 6,
   },
   tileTitle: {
-    fontSize: 12,
-    fontWeight: '700',
+    fontSize: 13,
+    fontWeight: '600',
     color: Palette.text,
   },
   tileSub: {
-    fontSize: 9,
+    fontSize: 11,
     color: Palette.overlay0,
     marginTop: 2,
     textAlign: 'center',
