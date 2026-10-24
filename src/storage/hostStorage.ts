@@ -23,9 +23,12 @@ export function validateHostPort(portStr: string): number {
   return port;
 }
 
-export function validateHostIp(ipStr: string): string {
-  const trimmed = ipStr.trim();
+export function validateHostIp(ipStr: string, allowEmpty = false): string {
+  const trimmed = (ipStr || '').trim();
   if (!trimmed) {
+    if (allowEmpty) {
+      return '';
+    }
     throw new Error('Host IP/Hostname cannot be empty');
   }
   if (/\s/.test(trimmed)) {
@@ -60,7 +63,7 @@ export async function loadHostConfig(): Promise<HostConfig> {
 }
 
 export async function saveHostConfig(config: HostConfig): Promise<void> {
-  const safeIp = validateHostIp(config.hostIp);
+  const safeIp = validateHostIp(config.hostIp, true);
   const safePort = validateHostPort(config.hostPort.toString());
   const funTabVal = config.enableFunTab !== false ? 'true' : 'false';
 

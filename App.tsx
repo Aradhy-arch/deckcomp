@@ -1,7 +1,7 @@
 import * as Battery from 'expo-battery';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
-import { LayoutGrid, SlidersHorizontal, Terminal, Upload } from 'lucide-react-native';
+import { Laptop, LayoutGrid, Radio, SlidersHorizontal, Terminal, Upload } from 'lucide-react-native';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   AppState,
@@ -30,6 +30,7 @@ import { TelemetryDeck } from './src/components/TelemetryDeck';
 import { ToastHUD } from './src/components/ToastHUD';
 import { Palette } from './src/constants/theme';
 import {
+  dismissPersistentNotification,
   initNotificationService,
   notifyIncomingFileFromHost,
   showPersistentNotification,
@@ -248,6 +249,7 @@ function DeckCompMain() {
     if (isPollingRef.current) return;
     if (!hostConfig.hostIp || !hostConfig.hostIp.trim()) {
       setNetworkStatus('offline');
+      setHostname(null);
       return;
     }
 
@@ -386,6 +388,9 @@ function DeckCompMain() {
   const handleSelectDevice = async (device: DeviceConfig) => {
     failedPingsCountRef.current = 0;
     setCurrentDevice(device);
+    setHostname(null);
+    setHostTelemetry(null);
+    setMediaStatus(null);
     await setActiveDeviceId(device.id);
     const updatedConfig: HostConfig = {
       hostIp: device.hostIp,
@@ -408,28 +413,33 @@ function DeckCompMain() {
   };
 
   const handleRemoveDevice = async (id: string) => {
-    const updated = await removeDevice(id);
-    setDevices(updated);
-    if (currentDevice?.id === id) {
-      if (updated.length > 0) {
-        await handleSelectDevice(updated[0]);
-      } else {
-        setCurrentDevice(null);
-        await setActiveDeviceId('');
-        const emptyConfig: HostConfig = {
-          hostIp: '',
-          hostPort: 8088,
-          enableFunTab: hostConfig.enableFunTab,
-        };
-        await saveHostConfig(emptyConfig);
-        configGenRef.current += 1;
-        setHostConfig(emptyConfig);
-        apiClientRef.current = null;
-        setNetworkStatus('offline');
-        setHostname(null);
-        setHostTelemetry(null);
-        setMediaStatus(null);
+    try {
+      const updated = await removeDevice(id);
+      setDevices(updated);
+      if (updated.length === 0 || currentDevice?.id === id) {
+        if (updated.length > 0) {
+          await handleSelectDevice(updated[0]);
+        } else {
+          setCurrentDevice(null);
+          await setActiveDeviceId('');
+          const emptyConfig: HostConfig = {
+            hostIp: '',
+            hostPort: 8088,
+            enableFunTab: hostConfig.enableFunTab,
+          };
+          await saveHostConfig(emptyConfig);
+          configGenRef.current += 1;
+          setHostConfig(emptyConfig);
+          apiClientRef.current = null;
+          setNetworkStatus('offline');
+          setHostname(null);
+          setHostTelemetry(null);
+          setMediaStatus(null);
+          dismissPersistentNotification().catch(() => {});
+        }
       }
+    } catch (err) {
+      console.warn('Failed to remove device', err);
     }
   };
 
@@ -461,6 +471,10 @@ function DeckCompMain() {
     }
   };
 
+  const isWorkstationPaired = Boolean(
+    devices.length > 0 && currentDevice && hostConfig.hostIp && hostConfig.hostIp.trim()
+  );
+
   return (
     <View style={[styles.mainContainer, { paddingTop: insets.top }]}>
       <StatusBar style="light" />
@@ -478,11 +492,12 @@ function DeckCompMain() {
         hostPort={hostConfig.hostPort}
         networkStatus={networkStatus}
         hostname={hostname}
+        isPaired={isWorkstationPaired}
         onOpenConfig={() => setConfigModalVisible(true)}
         onOpenDrawer={() => setDrawerVisible(true)}
       />
 
-      {networkStatus === 'offline' && (
+      {networkStatus === 'offline' && isWorkstationPaired && (
         <OfflineBanner
           onRetry={fetchWorkstationData}
           errorMessage={errorMessage}
@@ -490,7 +505,36 @@ function DeckCompMain() {
       )}
 
       {/* Main Content Area */}
-      {activeTab === 'fun' ? (
+      {!isWorkstationPaired ? (
+        <View style={styles.unpairedContainer}>
+          <View style={styles.unpairedCard}>
+            <View style={styles.unpairedIconCircle}>
+              <Laptop size={36} color={Palette.mauve} />
+            </View>
+            <Text style={styles.unpairedTitle}>Workstation Required</Text>
+            <Text style={styles.unpairedSub}>
+              Pair your Linux computer running the DeckComp companion server to enable remote controls, file drop, media sync, and terminal visualizers.
+            </Text>
+
+            <TouchableOpacity
+              style={styles.pairPrimaryBtn}
+              onPress={() => setPairingModalVisible(true)}
+              activeOpacity={0.8}
+            >
+              <Radio size={16} color={Palette.crust} style={{ marginRight: 6 }} />
+              <Text style={styles.pairPrimaryBtnText}>Pair Workstation</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.pairSecondaryBtn}
+              onPress={() => setConfigModalVisible(true)}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.pairSecondaryBtnText}>Connection Settings</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      ) : activeTab === 'fun' ? (
         <ScrollView
           style={styles.scroll}
           contentContainerStyle={styles.scrollContent}
@@ -540,93 +584,95 @@ function DeckCompMain() {
       )}
 
       {/* Bottom Navigation Tab Bar */}
-      <View
-        style={[
-          styles.tabBar,
-          {
-            paddingBottom: Math.max(insets.bottom, 12),
-            paddingTop: 8,
-          },
-        ]}
-      >
-        <TouchableOpacity
-          style={[styles.tabItem, activeTab === 'deck' ? styles.activeTabItem : null]}
-          onPress={() => setActiveTab('deck')}
-          activeOpacity={0.7}
+      {isWorkstationPaired && (
+        <View
+          style={[
+            styles.tabBar,
+            {
+              paddingBottom: Math.max(insets.bottom, 12),
+              paddingTop: 8,
+            },
+          ]}
         >
-          <SlidersHorizontal
-            size={19}
-            color={activeTab === 'deck' ? Palette.mauve : Palette.subtext0}
-          />
-          <Text
-            style={[
-              styles.tabLabel,
-              activeTab === 'deck' ? styles.activeTabLabel : null,
-            ]}
-          >
-            Controls
-          </Text>
-        </TouchableOpacity>
-
-        {hostConfig.enableFunTab !== false && (
           <TouchableOpacity
-            style={[styles.tabItem, activeTab === 'fun' ? styles.activeTabItem : null]}
-            onPress={() => setActiveTab('fun')}
+            style={[styles.tabItem, activeTab === 'deck' ? styles.activeTabItem : null]}
+            onPress={() => setActiveTab('deck')}
             activeOpacity={0.7}
           >
-            <LayoutGrid
+            <SlidersHorizontal
               size={19}
-              color={activeTab === 'fun' ? Palette.mauve : Palette.subtext0}
+              color={activeTab === 'deck' ? Palette.mauve : Palette.subtext0}
             />
             <Text
               style={[
                 styles.tabLabel,
-                activeTab === 'fun' ? styles.activeTabLabel : null,
+                activeTab === 'deck' ? styles.activeTabLabel : null,
               ]}
             >
-              Visuals
+              Controls
             </Text>
           </TouchableOpacity>
-        )}
 
-        <TouchableOpacity
-          style={[styles.tabItem, activeTab === 'drop' ? styles.activeTabItem : null]}
-          onPress={() => setActiveTab('drop')}
-          activeOpacity={0.7}
-        >
-          <Upload
-            size={19}
-            color={activeTab === 'drop' ? Palette.mauve : Palette.subtext0}
-          />
-          <Text
-            style={[
-              styles.tabLabel,
-              activeTab === 'drop' ? styles.activeTabLabel : null,
-            ]}
-          >
-            File Drop
-          </Text>
-        </TouchableOpacity>
+          {hostConfig.enableFunTab !== false && (
+            <TouchableOpacity
+              style={[styles.tabItem, activeTab === 'fun' ? styles.activeTabItem : null]}
+              onPress={() => setActiveTab('fun')}
+              activeOpacity={0.7}
+            >
+              <LayoutGrid
+                size={19}
+                color={activeTab === 'fun' ? Palette.mauve : Palette.subtext0}
+              />
+              <Text
+                style={[
+                  styles.tabLabel,
+                  activeTab === 'fun' ? styles.activeTabLabel : null,
+                ]}
+              >
+                Visuals
+              </Text>
+            </TouchableOpacity>
+          )}
 
-        <TouchableOpacity
-          style={[styles.tabItem, activeTab === 'terminal' ? styles.activeTabItem : null]}
-          onPress={() => setActiveTab('terminal')}
-          activeOpacity={0.7}
-        >
-          <Terminal
-            size={19}
-            color={activeTab === 'terminal' ? Palette.mauve : Palette.subtext0}
-          />
-          <Text
-            style={[
-              styles.tabLabel,
-              activeTab === 'terminal' ? styles.activeTabLabel : null,
-            ]}
+          <TouchableOpacity
+            style={[styles.tabItem, activeTab === 'drop' ? styles.activeTabItem : null]}
+            onPress={() => setActiveTab('drop')}
+            activeOpacity={0.7}
           >
-            Terminal
-          </Text>
-        </TouchableOpacity>
-      </View>
+            <Upload
+              size={19}
+              color={activeTab === 'drop' ? Palette.mauve : Palette.subtext0}
+            />
+            <Text
+              style={[
+                styles.tabLabel,
+                activeTab === 'drop' ? styles.activeTabLabel : null,
+              ]}
+            >
+              File Drop
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.tabItem, activeTab === 'terminal' ? styles.activeTabItem : null]}
+            onPress={() => setActiveTab('terminal')}
+            activeOpacity={0.7}
+          >
+            <Terminal
+              size={19}
+              color={activeTab === 'terminal' ? Palette.mauve : Palette.subtext0}
+            />
+            <Text
+              style={[
+                styles.tabLabel,
+                activeTab === 'terminal' ? styles.activeTabLabel : null,
+              ]}
+            >
+              Terminal
+            </Text>
+          </TouchableOpacity>
+        </View>
+      )}
 
       {/* Side Hamburger Drawer */}
       <SideDrawer
@@ -725,5 +771,76 @@ const styles = StyleSheet.create({
   activeTabLabel: {
     color: Palette.mauve,
     fontWeight: '700',
+  },
+  unpairedContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 24,
+    backgroundColor: Palette.base,
+  },
+  unpairedCard: {
+    width: '100%',
+    backgroundColor: Palette.surface0,
+    borderRadius: 16,
+    padding: 24,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: Palette.surface1,
+  },
+  unpairedIconCircle: {
+    width: 68,
+    height: 68,
+    borderRadius: 34,
+    backgroundColor: 'rgba(203, 166, 247, 0.12)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(203, 166, 247, 0.25)',
+  },
+  unpairedTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: Palette.text,
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  unpairedSub: {
+    fontSize: 13,
+    color: Palette.subtext0,
+    lineHeight: 19,
+    textAlign: 'center',
+    marginBottom: 24,
+  },
+  pairPrimaryBtn: {
+    width: '100%',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: Palette.mauve,
+    paddingVertical: 13,
+    borderRadius: 10,
+    marginBottom: 10,
+  },
+  pairPrimaryBtnText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: Palette.crust,
+  },
+  pairSecondaryBtn: {
+    width: '100%',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: Palette.surface1,
+    paddingVertical: 11,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: Palette.surface2,
+  },
+  pairSecondaryBtnText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: Palette.subtext0,
   },
 });

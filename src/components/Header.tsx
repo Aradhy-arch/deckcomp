@@ -9,6 +9,7 @@ interface HeaderProps {
   hostPort: number;
   networkStatus: NetworkStatus;
   hostname: string | null;
+  isPaired?: boolean;
   onOpenConfig: () => void;
   onOpenDrawer: () => void;
 }
@@ -16,10 +17,14 @@ interface HeaderProps {
 export const Header: React.FC<HeaderProps> = ({
   networkStatus,
   hostname,
+  isPaired = true,
   onOpenConfig,
   onOpenDrawer,
 }) => {
   const getStatusColor = () => {
+    if (!isPaired) {
+      return Palette.overlay0;
+    }
     switch (networkStatus) {
       case 'online':
         return Palette.green;
@@ -32,6 +37,9 @@ export const Header: React.FC<HeaderProps> = ({
   };
 
   const getStatusLabel = () => {
+    if (!isPaired) {
+      return 'Not Paired';
+    }
     switch (networkStatus) {
       case 'online':
         return hostname ? hostname : 'Connected';
