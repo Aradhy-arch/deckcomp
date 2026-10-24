@@ -1,4 +1,4 @@
-import { AlertTriangle, Trash2 } from 'lucide-react-native';
+import { AlertTriangle, Power, RotateCcw, Trash2, X } from 'lucide-react-native';
 import React from 'react';
 import {
   Modal,
@@ -16,6 +16,7 @@ interface ConfirmModalProps {
   confirmText?: string;
   cancelText?: string;
   isDestructive?: boolean;
+  icon?: 'trash' | 'warning' | 'reset' | 'power';
   onConfirm: () => void;
   onCancel: () => void;
 }
@@ -27,36 +28,46 @@ export const ConfirmModal: React.FC<ConfirmModalProps> = ({
   confirmText = 'Confirm',
   cancelText = 'Cancel',
   isDestructive = false,
+  icon,
   onConfirm,
   onCancel,
 }) => {
+  const renderIcon = () => {
+    if (icon === 'trash' || (isDestructive && icon !== 'power')) {
+      return <Trash2 size={18} color={Palette.red} />;
+    }
+    if (icon === 'reset') {
+      return <RotateCcw size={18} color={Palette.sapphire} />;
+    }
+    if (icon === 'power') {
+      return <Power size={18} color={isDestructive ? Palette.red : Palette.peach} />;
+    }
+    return <AlertTriangle size={18} color={isDestructive ? Palette.red : Palette.mauve} />;
+  };
+
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onCancel}>
       <View style={styles.backdrop}>
         <TouchableOpacity
-          style={styles.backdropTouchable}
+          style={StyleSheet.absoluteFill}
           activeOpacity={1}
           onPress={onCancel}
         />
         <View style={[styles.card, isDestructive && styles.destructiveCard]}>
-          <View
-            style={[
-              styles.iconCircle,
-              {
-                backgroundColor: isDestructive
-                  ? 'rgba(243, 139, 168, 0.15)'
-                  : 'rgba(203, 166, 247, 0.15)',
-              },
-            ]}
-          >
-            {isDestructive ? (
-              <Trash2 size={24} color={Palette.red} />
-            ) : (
-              <AlertTriangle size={24} color={Palette.mauve} />
-            )}
+          <View style={styles.headerRow}>
+            <View style={styles.titleGroup}>
+              {renderIcon()}
+              <Text style={styles.title}>{title}</Text>
+            </View>
+            <TouchableOpacity
+              onPress={onCancel}
+              activeOpacity={0.7}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            >
+              <X size={16} color={Palette.overlay0} />
+            </TouchableOpacity>
           </View>
 
-          <Text style={styles.title}>{title}</Text>
           <Text style={styles.message}>{message}</Text>
 
           <View style={styles.btnRow}>
@@ -71,7 +82,11 @@ export const ConfirmModal: React.FC<ConfirmModalProps> = ({
             <TouchableOpacity
               style={[
                 styles.confirmBtn,
-                { backgroundColor: isDestructive ? Palette.red : Palette.mauve },
+                isDestructive
+                  ? styles.destructiveBtn
+                  : icon === 'reset'
+                  ? styles.resetBtn
+                  : styles.primaryBtn,
               ]}
               onPress={onConfirm}
               activeOpacity={0.8}
@@ -88,85 +103,86 @@ export const ConfirmModal: React.FC<ConfirmModalProps> = ({
 const styles = StyleSheet.create({
   backdrop: {
     flex: 1,
-    backgroundColor: 'rgba(17, 17, 27, 0.78)',
+    backgroundColor: 'rgba(17, 17, 27, 0.75)',
     justifyContent: 'center',
     alignItems: 'center',
     padding: 24,
-  },
-  backdropTouchable: {
-    ...StyleSheet.absoluteFill,
   },
   card: {
     width: '100%',
-    maxWidth: 360,
-    backgroundColor: Palette.base,
-    borderRadius: 24,
-    padding: 24,
-    alignItems: 'center',
+    maxWidth: 340,
+    backgroundColor: Palette.surface0,
+    borderRadius: 12,
+    padding: 18,
     borderWidth: 1,
-    borderColor: Palette.surface1,
-    elevation: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.35,
-    shadowRadius: 16,
+    borderColor: Palette.surface2,
   },
   destructiveCard: {
-    borderColor: 'rgba(243, 139, 168, 0.3)',
+    borderColor: 'rgba(243, 139, 168, 0.35)',
   },
-  iconCircle: {
-    width: 52,
-    height: 52,
-    borderRadius: 26,
-    justifyContent: 'center',
+  headerRow: {
+    flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 16,
-  },
-  title: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: Palette.text,
-    textAlign: 'center',
+    justifyContent: 'space-between',
     marginBottom: 8,
   },
+  titleGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    flex: 1,
+    marginRight: 8,
+  },
+  title: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: Palette.text,
+  },
   message: {
-    fontSize: 14,
+    fontSize: 13,
     color: Palette.subtext0,
-    textAlign: 'center',
-    lineHeight: 20,
-    marginBottom: 24,
+    lineHeight: 18,
+    marginBottom: 20,
   },
   btnRow: {
     flexDirection: 'row',
-    width: '100%',
-    gap: 12,
+    justifyContent: 'flex-end',
+    gap: 10,
   },
   cancelBtn: {
-    flex: 1,
-    paddingVertical: 13,
-    borderRadius: 14,
-    backgroundColor: Palette.surface0,
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    borderRadius: 8,
+    backgroundColor: Palette.surface1,
+    borderWidth: 1,
+    borderColor: Palette.surface2,
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: Palette.surface1,
   },
   cancelBtnText: {
-    color: Palette.subtext1,
-    fontSize: 14,
+    color: Palette.subtext0,
+    fontSize: 13,
     fontWeight: '600',
   },
   confirmBtn: {
-    flex: 1,
-    paddingVertical: 13,
-    borderRadius: 14,
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: 8,
     alignItems: 'center',
     justifyContent: 'center',
-    elevation: 3,
+  },
+  destructiveBtn: {
+    backgroundColor: Palette.red,
+  },
+  primaryBtn: {
+    backgroundColor: Palette.mauve,
+  },
+  resetBtn: {
+    backgroundColor: Palette.sapphire,
   },
   confirmBtnText: {
     color: Palette.crust,
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '700',
   },
 });

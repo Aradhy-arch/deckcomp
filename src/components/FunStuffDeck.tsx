@@ -21,7 +21,6 @@ import {
 import React, { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
-  Alert,
   Modal,
   ScrollView,
   StyleSheet,
@@ -39,6 +38,7 @@ import {
   resetPresets,
 } from '../storage/presetStorage';
 import { FunPreset, PresetIconName } from '../types';
+import { ConfirmModal } from './ConfirmModal';
 
 interface FunStuffDeckProps {
   apiClient: ApiClient | null;
@@ -74,6 +74,10 @@ export const FunStuffDeck: React.FC<FunStuffDeckProps> = ({ apiClient }) => {
   const [newIcon, setNewIcon] = useState<PresetIconName>('Flame');
   const [newSpawnMode, setNewSpawnMode] = useState<'terminal' | 'ambient' | 'background'>('terminal');
   const [formError, setFormError] = useState<string | null>(null);
+
+  // Confirmation Modals State
+  const [deleteTarget, setDeleteTarget] = useState<{ id: string; title: string } | null>(null);
+  const [showResetConfirm, setShowResetConfirm] = useState(false);
 
   useEffect(() => {
     let mounted = true;
@@ -157,36 +161,35 @@ export const FunStuffDeck: React.FC<FunStuffDeckProps> = ({ apiClient }) => {
   };
 
   const handleDelete = (id: string, title: string) => {
-    Alert.alert('Delete Preset', `Remove "${title}" from your presets?`, [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Delete',
-        style: 'destructive',
-        onPress: async () => {
-          const updated = await deletePreset(id);
-          setPresets(updated);
-          triggerFeedback(`Deleted "${title}"`);
-        },
-      },
-    ]);
+    setDeleteTarget({ id, title });
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!deleteTarget) return;
+    const { id, title } = deleteTarget;
+    setDeleteTarget(null);
+    try {
+      const updated = await deletePreset(id);
+      setPresets(updated);
+      triggerFeedback(`Deleted "${title}"`);
+    } catch {
+      triggerFeedback('Failed to delete preset');
+    }
   };
 
   const handleResetPresets = () => {
-    Alert.alert(
-      'Reset Defaults',
-      'Restore all default visualizer and monitoring presets?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Restore',
-          onPress: async () => {
-            const defaults = await resetPresets();
-            setPresets(defaults);
-            triggerFeedback('Restored default presets');
-          },
-        },
-      ]
-    );
+    setShowResetConfirm(true);
+  };
+
+  const handleConfirmReset = async () => {
+    setShowResetConfirm(false);
+    try {
+      const defaults = await resetPresets();
+      setPresets(defaults);
+      triggerFeedback('Restored default presets');
+    } catch {
+      triggerFeedback('Failed to restore presets');
+    }
   };
 
   const handleOpenAddModal = () => {
@@ -319,8 +322,13 @@ export const FunStuffDeck: React.FC<FunStuffDeckProps> = ({ apiClient }) => {
       )}
 
       {/* Add Preset Modal */}
-      <Modal visible={modalVisible} transparent animationType="slide" onRequestClose={() => setModalVisible(false)}>
+      <Modal visible={modalVisible} transparent animationType="fade" onRequestClose={() => setModalVisible(false)}>
         <View style={styles.modalBackdrop}>
+          <TouchableOpacity
+            style={StyleSheet.absoluteFill}
+            activeOpacity={1}
+            onPress={() => setModalVisible(false)}
+          />
           <View style={styles.modalCard}>
             <View style={styles.modalHeader}>
               <View style={styles.modalHeaderTitleRow}>
@@ -440,6 +448,32 @@ export const FunStuffDeck: React.FC<FunStuffDeckProps> = ({ apiClient }) => {
           </View>
         </View>
       </Modal>
+
+      {/* Delete Preset Confirmation Modal */}
+      <ConfirmModal
+        visible={deleteTarget !== null}
+        title="Delete Preset"
+        message={`Remove "${deleteTarget?.title}" from your visual presets?`}
+        confirmText="Delete"
+        cancelText="Cancel"
+        isDestructive={true}
+        icon="trash"
+        onConfirm={handleConfirmDelete}
+        onCancel={() => setDeleteTarget(null)}
+      />
+
+      {/* Reset Defaults Confirmation Modal */}
+      <ConfirmModal
+        visible={showResetConfirm}
+        title="Restore Defaults"
+        message="Restore all default visualizer and monitoring presets?"
+        confirmText="Restore"
+        cancelText="Cancel"
+        isDestructive={false}
+        icon="reset"
+        onConfirm={handleConfirmReset}
+        onCancel={() => setShowResetConfirm(false)}
+      />
     </View>
   );
 };

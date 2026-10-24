@@ -155,6 +155,11 @@ export const PairingModal: React.FC<PairingModalProps> = ({
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
       <View style={styles.backdrop}>
+        <TouchableOpacity
+          style={StyleSheet.absoluteFill}
+          activeOpacity={1}
+          onPress={onClose}
+        />
         <View style={styles.card}>
           <View style={styles.headerRow}>
             <View style={styles.titleRow}>

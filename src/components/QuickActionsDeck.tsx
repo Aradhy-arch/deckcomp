@@ -237,7 +237,8 @@ export const QuickActionsDeck: React.FC<QuickActionsDeckProps> = ({ apiClient })
         message={`Are you sure you want to ${powerModal?.title.toLowerCase()} your computer?`}
         confirmText={powerModal?.title || 'Confirm'}
         cancelText="Cancel"
-        isDestructive={true}
+        isDestructive={powerModal?.title === 'Power Off'}
+        icon="power"
         onConfirm={handleExecutePower}
         onCancel={() => setPowerModal(null)}
       />

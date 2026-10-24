@@ -598,6 +598,11 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({ visible, onCom
           onRequestClose={() => setShowEasterEgg(false)}
         >
           <View style={styles.easterEggBackdrop}>
+            <TouchableOpacity
+              style={StyleSheet.absoluteFill}
+              activeOpacity={1}
+              onPress={() => setShowEasterEgg(false)}
+            />
             <View style={styles.easterEggCard}>
               <View style={styles.hazardIconOuter}>
                 <View style={styles.hazardIconInner}>

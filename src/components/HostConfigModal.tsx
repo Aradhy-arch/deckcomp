@@ -1,4 +1,4 @@
-import { Radio, Server } from 'lucide-react-native';
+import { Radio, Server, X } from 'lucide-react-native';
 import React, { useState } from 'react';
 import {
   ActivityIndicator,
@@ -32,7 +32,6 @@ export const HostConfigModal: React.FC<HostConfigModalProps> = ({
   const [enableFunTab, setEnableFunTab] = useState(currentConfig.enableFunTab !== false);
   const [validationError, setValidationError] = useState<string | null>(null);
   const [testing, setTesting] = useState(false);
-  const [saving, setSaving] = useState(false);
   const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
 
   React.useEffect(() => {
@@ -48,8 +47,8 @@ export const HostConfigModal: React.FC<HostConfigModalProps> = ({
   const validateInputs = (): HostConfig | null => {
     setValidationError(null);
     try {
-      const validIp = validateHostIp(ip);
-      const validPort = validateHostPort(port);
+      const validIp = validateHostIp(ip.trim());
+      const validPort = validateHostPort(port.trim());
       return {
         hostIp: validIp,
         hostPort: validPort,
@@ -84,31 +83,53 @@ export const HostConfigModal: React.FC<HostConfigModalProps> = ({
     }
   };
 
-  const handleSave = async () => {
-    const validConfig = validateInputs();
-    if (!validConfig) return;
+  // Dynamically apply settings when exited by tapping outside the box or header close
+  const handleExitAndApply = async () => {
+    const isChanged =
+      ip.trim() !== currentConfig.hostIp ||
+      port.trim() !== currentConfig.hostPort.toString() ||
+      enableFunTab !== (currentConfig.enableFunTab !== false);
 
-    setSaving(true);
-    try {
-      await onSave(validConfig);
-      onClose();
-    } catch (err: unknown) {
-      setValidationError(err instanceof Error ? err.message : 'Failed to save configuration');
-    } finally {
-      setSaving(false);
+    if (isChanged) {
+      try {
+        const validIp = validateHostIp(ip.trim());
+        const validPort = validateHostPort(port.trim());
+        await onSave({
+          hostIp: validIp,
+          hostPort: validPort,
+          enableFunTab,
+        });
+      } catch {
+        // If inputs are invalid/incomplete on exit, safely keep existing config
+      }
     }
+    onClose();
   };
 
   return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={handleExitAndApply}>
       <View style={styles.backdrop}>
+        <TouchableOpacity
+          style={StyleSheet.absoluteFill}
+          activeOpacity={1}
+          onPress={handleExitAndApply}
+        />
         <View style={styles.card}>
           <View style={styles.cardHeader}>
-            <Server size={18} color={Palette.mauve} />
-            <Text style={styles.headerTitle}>Workstation Connection</Text>
+            <View style={styles.headerTitleGroup}>
+              <Server size={18} color={Palette.mauve} />
+              <Text style={styles.headerTitle}>Connection Settings</Text>
+            </View>
+            <TouchableOpacity
+              onPress={handleExitAndApply}
+              activeOpacity={0.7}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            >
+              <X size={18} color={Palette.overlay1} />
+            </TouchableOpacity>
           </View>
           <Text style={styles.instruction}>
-            Enter the local IP and port of your Linux daemon.
+            Configure your Linux companion daemon connection.
           </Text>
 
           {validationError && (
@@ -178,11 +199,12 @@ export const HostConfigModal: React.FC<HostConfigModalProps> = ({
             </View>
           </TouchableOpacity>
 
-          <View style={styles.buttonRow}>
+          <View style={styles.actionRow}>
             <TouchableOpacity
-              style={[styles.actionBtn, styles.testBtn]}
+              style={styles.testBtn}
               onPress={handleTest}
-              disabled={testing || saving}
+              disabled={testing}
+              activeOpacity={0.8}
             >
               {testing ? (
                 <ActivityIndicator size="small" color={Palette.mauve} />
@@ -191,25 +213,7 @@ export const HostConfigModal: React.FC<HostConfigModalProps> = ({
               )}
             </TouchableOpacity>
 
-            <TouchableOpacity
-              style={[styles.actionBtn, styles.cancelBtn]}
-              onPress={onClose}
-              disabled={saving}
-            >
-              <Text style={styles.cancelBtnText}>Cancel</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[styles.actionBtn, styles.saveBtn]}
-              onPress={handleSave}
-              disabled={testing || saving}
-            >
-              {saving ? (
-                <ActivityIndicator size="small" color={Palette.crust} />
-              ) : (
-                <Text style={styles.saveBtnText}>Save</Text>
-              )}
-            </TouchableOpacity>
+            <Text style={styles.autoSaveHint}>Applies on exit</Text>
           </View>
         </View>
       </View>
@@ -220,13 +224,14 @@ export const HostConfigModal: React.FC<HostConfigModalProps> = ({
 const styles = StyleSheet.create({
   backdrop: {
     flex: 1,
-    backgroundColor: 'rgba(17, 17, 27, 0.85)',
+    backgroundColor: 'rgba(17, 17, 27, 0.75)',
     justifyContent: 'center',
     alignItems: 'center',
     padding: 20,
   },
   card: {
     width: '100%',
+    maxWidth: 360,
     backgroundColor: Palette.surface0,
     borderRadius: 12,
     padding: 20,
@@ -236,18 +241,23 @@ const styles = StyleSheet.create({
   cardHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    justifyContent: 'space-between',
     marginBottom: 6,
   },
+  headerTitleGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
   headerTitle: {
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: '700',
     color: Palette.mauve,
   },
   instruction: {
-    fontSize: 13,
+    fontSize: 12,
     color: Palette.subtext0,
-    marginBottom: 14,
+    marginBottom: 12,
   },
   errorBox: {
     backgroundColor: Palette.crust,
@@ -263,8 +273,8 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   inputLabel: {
-    fontSize: 12,
-    fontWeight: '600',
+    fontSize: 11,
+    fontWeight: '700',
     color: Palette.lavender,
     marginBottom: 4,
     marginTop: 8,
@@ -272,16 +282,16 @@ const styles = StyleSheet.create({
   textInput: {
     backgroundColor: Palette.surface1,
     color: Palette.text,
-    fontSize: 14,
+    fontSize: 13,
     borderRadius: 8,
     paddingHorizontal: 12,
-    paddingVertical: 10,
+    paddingVertical: 9,
     borderWidth: 1,
     borderColor: Palette.surface2,
   },
   resultBadge: {
-    marginTop: 12,
-    padding: 10,
+    marginTop: 10,
+    padding: 9,
     borderRadius: 6,
     borderWidth: 1,
     borderColor: Palette.surface1,
@@ -297,7 +307,7 @@ const styles = StyleSheet.create({
     backgroundColor: Palette.mantle,
     padding: 12,
     borderRadius: 8,
-    marginTop: 10,
+    marginTop: 12,
     marginBottom: 16,
     borderWidth: 1,
     borderColor: Palette.surface1,
@@ -337,45 +347,30 @@ const styles = StyleSheet.create({
     alignSelf: 'flex-end',
     backgroundColor: Palette.crust,
   },
-  buttonRow: {
+  actionRow: {
     flexDirection: 'row',
-    justifyContent: 'flex-end',
-    marginTop: 20,
-  },
-  actionBtn: {
-    paddingVertical: 10,
-    paddingHorizontal: 16,
-    borderRadius: 8,
-    marginLeft: 8,
-    minWidth: 70,
     alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 4,
   },
   testBtn: {
     backgroundColor: Palette.surface1,
     borderWidth: 1,
     borderColor: Palette.mauve,
-    marginRight: 'auto',
-    marginLeft: 0,
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    alignItems: 'center',
+    minWidth: 80,
   },
   testBtnText: {
     color: Palette.mauve,
     fontWeight: '600',
-    fontSize: 13,
+    fontSize: 12,
   },
-  cancelBtn: {
-    backgroundColor: Palette.surface1,
-  },
-  cancelBtnText: {
-    color: Palette.subtext0,
-    fontWeight: '600',
-    fontSize: 13,
-  },
-  saveBtn: {
-    backgroundColor: Palette.mauve,
-  },
-  saveBtnText: {
-    color: Palette.crust,
-    fontWeight: '700',
-    fontSize: 13,
+  autoSaveHint: {
+    fontSize: 11,
+    color: Palette.overlay0,
+    fontStyle: 'italic',
   },
 });
