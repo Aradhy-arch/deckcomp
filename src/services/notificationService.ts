@@ -362,3 +362,60 @@ export async function notifyIncomingFileFromHost(
     console.warn('[NotificationService] Failed to schedule incoming file alert:', err);
   }
 }
+
+export async function notifyFileSendStarted(filename: string, hostname?: string) {
+  if (!isNotificationsSupported()) return;
+  const Notifications = getNotificationsModule();
+  if (!Notifications) return;
+
+  try {
+    await Notifications.scheduleNotificationAsync({
+      identifier: `send_start_${Date.now()}`,
+      content: {
+        title: 'DeckComp • Sending File',
+        body: `Sending "${filename}" to ${hostname || 'Workstation'}...`,
+        sound: false,
+        priority: Notifications.AndroidNotificationPriority.HIGH,
+      },
+      trigger: null,
+    });
+  } catch {}
+}
+
+export async function notifyFileSendCompleted(filename: string, hostname?: string) {
+  if (!isNotificationsSupported()) return;
+  const Notifications = getNotificationsModule();
+  if (!Notifications) return;
+
+  try {
+    await Notifications.scheduleNotificationAsync({
+      identifier: `send_done_${Date.now()}`,
+      content: {
+        title: 'DeckComp • File Sent',
+        body: `Successfully sent "${filename}" to ${hostname || 'Workstation'}.`,
+        sound: true,
+        priority: Notifications.AndroidNotificationPriority.DEFAULT,
+      },
+      trigger: null,
+    });
+  } catch {}
+}
+
+export async function notifyFileDownloadCompleted(filename: string, folder?: string) {
+  if (!isNotificationsSupported()) return;
+  const Notifications = getNotificationsModule();
+  if (!Notifications) return;
+
+  try {
+    await Notifications.scheduleNotificationAsync({
+      identifier: `recv_done_${Date.now()}`,
+      content: {
+        title: 'DeckComp • File Received',
+        body: `Saved "${filename}" to ${folder || 'Downloads'}.`,
+        sound: true,
+        priority: Notifications.AndroidNotificationPriority.DEFAULT,
+      },
+      trigger: null,
+    });
+  } catch {}
+}

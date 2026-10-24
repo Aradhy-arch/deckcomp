@@ -28,6 +28,11 @@ import {
   getSavedDownloadDirectoryUri,
   promptSelectDownloadDirectory,
 } from '../services/fileReceiveService';
+import {
+  notifyFileDownloadCompleted,
+  notifyFileSendCompleted,
+  notifyFileSendStarted,
+} from '../services/notificationService';
 import { DropResult, SharedFileItem } from '../types';
 
 interface FileDropDeckProps {
@@ -134,6 +139,7 @@ export const FileDropDeck: React.FC<FileDropDeckProps> = ({ apiClient }) => {
 
     for (let i = 0; i < selectedFiles.length; i++) {
       const file = selectedFiles[i];
+      notifyFileSendStarted(file.name).catch(() => {});
       setUploadProgress({
         current: i + 1,
         total: selectedFiles.length,
@@ -161,6 +167,7 @@ export const FileDropDeck: React.FC<FileDropDeckProps> = ({ apiClient }) => {
           }
         );
         results.push(dropRes);
+        notifyFileSendCompleted(dropRes.saved_filename || file.name).catch(() => {});
       } catch (err: unknown) {
         errors.push(`${file.name}: ${formatErrorMessage(err, 'An error occurred')}`);
       }
@@ -189,6 +196,7 @@ export const FileDropDeck: React.FC<FileDropDeckProps> = ({ apiClient }) => {
     setErrorMsg(null);
     try {
       const res = await downloadAndSaveSharedFile(apiClient, item);
+      notifyFileDownloadCompleted(item.filename, res.savedPath).catch(() => {});
       setPendingShares((prev) => prev.filter((p) => p.id !== item.id));
       setDownloadSuccess(`Saved "${item.filename}" to ${res.savedPath}`);
       setTimeout(() => setDownloadSuccess(null), 4500);
@@ -226,6 +234,7 @@ export const FileDropDeck: React.FC<FileDropDeckProps> = ({ apiClient }) => {
         const res = await downloadAndSaveSharedFile(apiClient, item);
         downloadedCount++;
         lastSavedPath = res.savedPath;
+        notifyFileDownloadCompleted(item.filename, res.savedPath).catch(() => {});
         setPendingShares((prev) => prev.filter((p) => p.id !== item.id));
       } catch (err: unknown) {
         errors.push(`${item.filename}: ${formatErrorMessage(err, 'An error occurred')}`);

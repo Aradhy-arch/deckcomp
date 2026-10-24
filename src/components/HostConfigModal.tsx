@@ -1,4 +1,4 @@
-import { Radio, Server, X } from 'lucide-react-native';
+import { ChevronDown, ChevronUp, Radio, Server, X } from 'lucide-react-native';
 import React, { useState } from 'react';
 import {
   ActivityIndicator,
@@ -29,6 +29,7 @@ export const HostConfigModal: React.FC<HostConfigModalProps> = ({
 }) => {
   const [ip, setIp] = useState(currentConfig.hostIp);
   const [port, setPort] = useState(currentConfig.hostPort.toString());
+  const [showAdvanced, setShowAdvanced] = useState(currentConfig.hostPort !== 8088);
   const [enableFunTab, setEnableFunTab] = useState(currentConfig.enableFunTab !== false);
   const [validationError, setValidationError] = useState<string | null>(null);
   const [testing, setTesting] = useState(false);
@@ -38,6 +39,7 @@ export const HostConfigModal: React.FC<HostConfigModalProps> = ({
     if (visible) {
       setIp(currentConfig.hostIp);
       setPort(currentConfig.hostPort.toString());
+      setShowAdvanced(currentConfig.hostPort !== 8088);
       setEnableFunTab(currentConfig.enableFunTab !== false);
       setValidationError(null);
       setTestResult(null);
@@ -152,18 +154,35 @@ export const HostConfigModal: React.FC<HostConfigModalProps> = ({
             autoCorrect={false}
           />
 
-          <Text style={styles.inputLabel}>Port (Default: 8088)</Text>
-          <TextInput
-            style={styles.textInput}
-            value={port}
-            onChangeText={(val) => {
-              setPort(val);
-              setValidationError(null);
-            }}
-            placeholder="8088"
-            placeholderTextColor={Palette.overlay0}
-            keyboardType="numeric"
-          />
+          <TouchableOpacity
+            style={styles.advancedToggleRow}
+            onPress={() => setShowAdvanced(!showAdvanced)}
+            activeOpacity={0.7}
+          >
+            <Text style={styles.advancedToggleText}>Advanced Network Settings</Text>
+            {showAdvanced ? (
+              <ChevronUp size={16} color={Palette.subtext0} />
+            ) : (
+              <ChevronDown size={16} color={Palette.subtext0} />
+            )}
+          </TouchableOpacity>
+
+          {showAdvanced && (
+            <View style={styles.advancedContainer}>
+              <Text style={styles.inputLabel}>Daemon Port (Default: 8088)</Text>
+              <TextInput
+                style={styles.textInput}
+                value={port}
+                onChangeText={(val) => {
+                  setPort(val);
+                  setValidationError(null);
+                }}
+                placeholder="8088"
+                placeholderTextColor={Palette.overlay0}
+                keyboardType="numeric"
+              />
+            </View>
+          )}
 
           {testResult && (
             <View
@@ -288,6 +307,22 @@ const styles = StyleSheet.create({
     paddingVertical: 9,
     borderWidth: 1,
     borderColor: Palette.surface2,
+  },
+  advancedToggleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 10,
+    marginTop: 6,
+  },
+  advancedToggleText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: Palette.subtext0,
+  },
+  advancedContainer: {
+    marginTop: 2,
+    marginBottom: 4,
   },
   resultBadge: {
     marginTop: 10,
