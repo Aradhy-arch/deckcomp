@@ -58,8 +58,11 @@ export const Header: React.FC<HeaderProps> = ({
           style={styles.drawerBtn}
           onPress={onOpenDrawer}
           activeOpacity={0.7}
+          hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+          accessibilityRole="button"
+          accessibilityLabel="Open Workstation Drawer"
         >
-          <Menu size={20} color={Palette.text} />
+          <Menu size={22} color={Palette.text} />
         </TouchableOpacity>
         <View style={styles.brandContainer}>
           <Image
@@ -81,8 +84,11 @@ export const Header: React.FC<HeaderProps> = ({
         style={styles.configBtn}
         onPress={onOpenConfig}
         activeOpacity={0.7}
+        hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+        accessibilityRole="button"
+        accessibilityLabel="Connection Settings"
       >
-        <Settings size={18} color={Palette.subtext0} />
+        <Settings size={20} color={Palette.subtext0} />
       </TouchableOpacity>
     </View>
   );
@@ -94,18 +100,25 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingVertical: 8,
     backgroundColor: Palette.mantle,
     borderBottomWidth: 1,
     borderBottomColor: Palette.surface0,
+    zIndex: 10,
+    elevation: 4,
   },
   leftRow: {
     flexDirection: 'row',
     alignItems: 'center',
   },
   drawerBtn: {
-    paddingRight: 12,
-    paddingVertical: 4,
+    width: 44,
+    height: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 8,
+    marginRight: 4,
+    marginLeft: -6,
   },
   brandContainer: {
     flexDirection: 'row',
@@ -142,10 +155,11 @@ const styles = StyleSheet.create({
     color: Palette.subtext0,
   },
   configBtn: {
-    width: 34,
-    height: 34,
+    width: 44,
+    height: 44,
     borderRadius: 8,
     alignItems: 'center',
     justifyContent: 'center',
+    marginRight: -6,
   },
 });

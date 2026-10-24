@@ -54,13 +54,17 @@ export const SideDrawer: React.FC<SideDrawerProps> = ({
 }) => {
   const [unpairTarget, setUnpairTarget] = useState<{ id: string; name: string } | null>(null);
   const [modalVisible, setModalVisible] = useState(visible);
+  const isClosingRef = useRef(false);
 
   const slideAnim = useRef(new Animated.Value(-DRAWER_WIDTH)).current;
   const fadeAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     if (visible) {
+      isClosingRef.current = false;
       setModalVisible(true);
+      slideAnim.setValue(-DRAWER_WIDTH);
+      fadeAnim.setValue(0);
       Animated.parallel([
         Animated.timing(slideAnim, {
           toValue: 0,
@@ -75,25 +79,31 @@ export const SideDrawer: React.FC<SideDrawerProps> = ({
         }),
       ]).start();
     } else {
-      Animated.parallel([
-        Animated.timing(slideAnim, {
-          toValue: -DRAWER_WIDTH,
-          duration: 200,
-          easing: Easing.in(Easing.cubic),
-          useNativeDriver: true,
-        }),
-        Animated.timing(fadeAnim, {
-          toValue: 0,
-          duration: 200,
-          useNativeDriver: true,
-        }),
-      ]).start(() => {
-        setModalVisible(false);
-      });
+      if (modalVisible && !isClosingRef.current) {
+        isClosingRef.current = true;
+        Animated.parallel([
+          Animated.timing(slideAnim, {
+            toValue: -DRAWER_WIDTH,
+            duration: 200,
+            easing: Easing.in(Easing.cubic),
+            useNativeDriver: true,
+          }),
+          Animated.timing(fadeAnim, {
+            toValue: 0,
+            duration: 200,
+            useNativeDriver: true,
+          }),
+        ]).start(() => {
+          isClosingRef.current = false;
+          setModalVisible(false);
+        });
+      }
     }
-  }, [visible, slideAnim, fadeAnim]);
+  }, [visible]);
 
   const handleClose = () => {
+    if (isClosingRef.current) return;
+    isClosingRef.current = true;
     Animated.parallel([
       Animated.timing(slideAnim, {
         toValue: -DRAWER_WIDTH,
@@ -107,6 +117,7 @@ export const SideDrawer: React.FC<SideDrawerProps> = ({
         useNativeDriver: true,
       }),
     ]).start(() => {
+      isClosingRef.current = false;
       setModalVisible(false);
       onClose();
     });
