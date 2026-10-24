@@ -457,11 +457,15 @@ export class ApiClient {
   }
 
   // Static discovery helper for scanning local network
-  static async scanHost(ip: string, port: number = 8088): Promise<DiscoveredHost | null> {
+  static async scanHost(
+    ip: string,
+    port: number = 8088,
+    timeoutMs: number = 450
+  ): Promise<DiscoveredHost | null> {
     if (!ip || !ip.trim()) return null;
     const cleanIp = ip.trim();
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 1200);
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
     try {
       const res = await fetch(`http://${cleanIp}:${port}/api/v1/health`, {
         signal: controller.signal,
@@ -484,28 +488,61 @@ export class ApiClient {
     return null;
   }
 
-  static async discoverSubnet(baseSubnetPrefix?: string, port: number = 8088): Promise<DiscoveredHost[]> {
+  static async discoverSubnet(
+    baseSubnetPrefix?: string,
+    port: number = 8088
+  ): Promise<DiscoveredHost[]> {
     const prefixes = baseSubnetPrefix && baseSubnetPrefix.trim()
       ? [baseSubnetPrefix.trim()]
-      : ['192.168.1', '192.168.0', '192.168.31', '10.0.0'];
+      : ['192.168.1', '192.168.0', '192.168.31', '192.168.29', '192.168.43', '10.0.0'];
 
     const results: DiscoveredHost[] = [];
+
+    const scanBatch = async (ips: string[], timeout: number) => {
+      const batchRes = await Promise.all(ips.map((candidate) => ApiClient.scanHost(candidate, port, timeout)));
+      for (const host of batchRes) {
+        if (host && !results.some((r) => r.ip === host.ip)) {
+          results.push(host);
+        }
+      }
+    };
+
+    // Phase 1: High-probability DHCP addresses (.2-.40 and .100-.140) across prefixes
+    const prioritySuffixes: number[] = [];
+    for (let i = 2; i <= 40; i++) prioritySuffixes.push(i);
+    for (let i = 100; i <= 140; i++) prioritySuffixes.push(i);
+
     for (const prefix of prefixes) {
-      const candidates = Array.from({ length: 254 }, (_, i) => `${prefix}.${i + 1}`);
+      const candidates = prioritySuffixes.map((s) => `${prefix}.${s}`);
       const batchSize = 40;
       for (let i = 0; i < candidates.length; i += batchSize) {
-        const batch = candidates.slice(i, i + batchSize);
-        const batchResults = await Promise.all(batch.map((candidateIp) => ApiClient.scanHost(candidateIp, port)));
-        for (const host of batchResults) {
-          if (host && !results.some((r) => r.ip === host.ip)) {
-            results.push(host);
-          }
-        }
+        await scanBatch(candidates.slice(i, i + batchSize), 400);
         if (results.length > 0 && !baseSubnetPrefix) {
           return results;
         }
       }
     }
+
+    if (results.length > 0) {
+      return results;
+    }
+
+    // Phase 2: Full sweep across remaining addresses if Phase 1 found nothing
+    const remainingSuffixes: number[] = [];
+    for (let i = 41; i <= 99; i++) remainingSuffixes.push(i);
+    for (let i = 141; i <= 254; i++) remainingSuffixes.push(i);
+
+    for (const prefix of prefixes) {
+      const candidates = remainingSuffixes.map((s) => `${prefix}.${s}`);
+      const batchSize = 50;
+      for (let i = 0; i < candidates.length; i += batchSize) {
+        await scanBatch(candidates.slice(i, i + batchSize), 450);
+        if (results.length > 0 && !baseSubnetPrefix) {
+          return results;
+        }
+      }
+    }
+
     return results;
   }
 }
