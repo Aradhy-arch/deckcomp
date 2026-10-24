@@ -65,6 +65,23 @@ class TelemetryService:
                 except (ValueError, OSError):
                     pass
 
+        # Detect device type (laptop vs desktop PC)
+        device_type = "desktop"
+        if bat_dirs and battery_data.get("present"):
+            device_type = "laptop"
+        else:
+            chassis_file = Path("/sys/class/dmi/id/chassis_type")
+            if chassis_file.exists():
+                try:
+                    c_type = int(chassis_file.read_text().strip())
+                    # DMI chassis types: 8=Portable, 9=Laptop, 10=Notebook, 11=Hand Held, 12=Docking, 14=Sub Notebook, 30=Tablet, 31=Convertible, 32=Detachable
+                    if c_type in {8, 9, 10, 11, 12, 14, 30, 31, 32}:
+                        device_type = "laptop"
+                    else:
+                        device_type = "desktop"
+                except (ValueError, OSError):
+                    pass
+
         # Uptime
         uptime_seconds = 0.0
         uptime_file = Path("/proc/uptime")
@@ -75,6 +92,7 @@ class TelemetryService:
                 uptime_seconds = 0.0
 
         return {
+            "device_type": device_type,
             "battery": battery_data,
             "ac_connected": ac_connected,
             "uptime_seconds": uptime_seconds,
