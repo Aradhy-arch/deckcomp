@@ -37,7 +37,6 @@ import {
 } from './src/services/notificationService';
 import {
   addOrUpdateDevice,
-  DEFAULT_DEVICE,
   getActiveDeviceId,
   isOnboardingCompleted,
   loadDevices,
@@ -73,8 +72,8 @@ function DeckCompMain() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   // Multi-device and Onboarding state
-  const [devices, setDevices] = useState<DeviceConfig[]>([DEFAULT_DEVICE]);
-  const [currentDevice, setCurrentDevice] = useState<DeviceConfig>(DEFAULT_DEVICE);
+  const [devices, setDevices] = useState<DeviceConfig[]>([]);
+  const [currentDevice, setCurrentDevice] = useState<DeviceConfig | null>(null);
   const [drawerVisible, setDrawerVisible] = useState(false);
   const [pairingModalVisible, setPairingModalVisible] = useState(false);
   const [onboardingVisible, setOnboardingVisible] = useState(false);
@@ -116,19 +115,26 @@ function DeckCompMain() {
         const stored = await loadHostConfig();
         const devList = await loadDevices();
         const activeId = await getActiveDeviceId();
-        const activeDev = devList.find((d) => d.id === activeId) || devList[0] || DEFAULT_DEVICE;
+        const activeDev = devList.find((d) => d.id === activeId) || devList[0] || null;
 
         if (isMountedRef.current) {
           setDevices(devList);
           setCurrentDevice(activeDev);
+          const targetIp = activeDev ? activeDev.hostIp : (stored.hostIp || '');
+          const targetPort = activeDev ? activeDev.hostPort : (stored.hostPort || 8088);
+          const targetAuth = activeDev ? activeDev.authToken : stored.authToken;
           const mergedConfig: HostConfig = {
-            hostIp: activeDev.hostIp,
-            hostPort: activeDev.hostPort,
+            hostIp: targetIp,
+            hostPort: targetPort,
             enableFunTab: stored.enableFunTab,
-            authToken: activeDev.authToken,
+            authToken: targetAuth,
           };
           setHostConfig(mergedConfig);
-          apiClientRef.current = new ApiClient(mergedConfig);
+          if (targetIp && targetIp.trim()) {
+            apiClientRef.current = new ApiClient(mergedConfig);
+          } else {
+            apiClientRef.current = null;
+          }
           setHostAddressLoaded(true);
         }
 
@@ -251,7 +257,7 @@ function DeckCompMain() {
       setHostname(health.hostname);
       setNetworkStatus('online');
       setErrorMessage(null);
-      showPersistentNotification(health.hostname || currentDevice.name);
+      showPersistentNotification(health.hostname || currentDevice?.name || 'Linux Workstation');
 
       // 2. Fetch Telemetry, Media & Pending Outbox Shares independently
       const [telemetryRes, mediaRes, sharesRes] = await Promise.allSettled([
@@ -272,7 +278,7 @@ function DeckCompMain() {
         for (const share of sharesRes.value) {
           if (!notifiedSharesRef.current.has(share.id)) {
             notifiedSharesRef.current.add(share.id);
-            notifyIncomingFileFromHost(share, health.hostname || currentDevice.name);
+            notifyIncomingFileFromHost(share, health.hostname || currentDevice?.name || 'Linux Workstation');
           }
         }
       }
@@ -390,8 +396,26 @@ function DeckCompMain() {
   const handleRemoveDevice = async (id: string) => {
     const updated = await removeDevice(id);
     setDevices(updated);
-    if (currentDevice.id === id && updated.length > 0) {
-      await handleSelectDevice(updated[0]);
+    if (currentDevice?.id === id) {
+      if (updated.length > 0) {
+        await handleSelectDevice(updated[0]);
+      } else {
+        setCurrentDevice(null);
+        await setActiveDeviceId('');
+        const emptyConfig: HostConfig = {
+          hostIp: '',
+          hostPort: 8088,
+          enableFunTab: hostConfig.enableFunTab,
+        };
+        await saveHostConfig(emptyConfig);
+        configGenRef.current += 1;
+        setHostConfig(emptyConfig);
+        apiClientRef.current = null;
+        setNetworkStatus('offline');
+        setHostname(null);
+        setHostTelemetry(null);
+        setMediaStatus(null);
+      }
     }
   };
 
@@ -404,7 +428,7 @@ function DeckCompMain() {
   const handleSaveConfig = async (newConfig: HostConfig) => {
     const mergedConfig: HostConfig = {
       ...newConfig,
-      authToken: currentDevice.authToken,
+      authToken: currentDevice?.authToken,
     };
     await saveHostConfig(mergedConfig);
     configGenRef.current += 1;
@@ -412,9 +436,15 @@ function DeckCompMain() {
     if (mergedConfig.enableFunTab === false && activeTab === 'fun') {
       setActiveTab('deck');
     }
-    apiClientRef.current = new ApiClient(mergedConfig);
-    setNetworkStatus('checking');
-    await fetchWorkstationData();
+    if (mergedConfig.hostIp && mergedConfig.hostIp.trim()) {
+      apiClientRef.current = new ApiClient(mergedConfig);
+      setNetworkStatus('checking');
+      await fetchWorkstationData();
+    } else {
+      apiClientRef.current = null;
+      setNetworkStatus('offline');
+      setHostname(null);
+    }
   };
 
   return (
@@ -446,46 +476,49 @@ function DeckCompMain() {
       )}
 
       {/* Main Content Area */}
-      <ScrollView
-        style={styles.scroll}
-        contentContainerStyle={styles.scrollContent}
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={handleRefresh}
-            tintColor={Palette.mauve}
-            colors={[Palette.mauve, Palette.blue]}
-            progressBackgroundColor={Palette.mantle}
-          />
-        }
-      >
-        {activeTab === 'deck' && (
-          <>
-            <TelemetryDeck
-              hostTelemetry={hostTelemetry}
-              clientBattery={clientBattery}
+      {activeTab === 'fun' ? (
+        <ScrollView
+          style={styles.scroll}
+          contentContainerStyle={styles.scrollContent}
+          showsVerticalScrollIndicator={true}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={handleRefresh}
+              tintColor={Palette.mauve}
+              colors={[Palette.mauve, Palette.blue]}
+              progressBackgroundColor={Palette.mantle}
             />
-            <MediaDeck
-              mediaStatus={mediaStatus}
-              apiClient={apiClientRef.current}
-              onRefresh={fetchWorkstationData}
-            />
-            <QuickActionsDeck apiClient={apiClientRef.current} />
-          </>
-        )}
-
-        {activeTab === 'fun' && (
+          }
+        >
           <FunStuffDeck apiClient={apiClientRef.current} />
-        )}
+        </ScrollView>
+      ) : (
+        <View style={styles.staticTabContainer}>
+          {activeTab === 'deck' && (
+            <View style={styles.deckContainer}>
+              <TelemetryDeck
+                hostTelemetry={hostTelemetry}
+                clientBattery={clientBattery}
+              />
+              <MediaDeck
+                mediaStatus={mediaStatus}
+                apiClient={apiClientRef.current}
+                onRefresh={fetchWorkstationData}
+              />
+              <QuickActionsDeck apiClient={apiClientRef.current} />
+            </View>
+          )}
 
-        {activeTab === 'drop' && (
-          <FileDropDeck apiClient={apiClientRef.current} />
-        )}
+          {activeTab === 'drop' && (
+            <FileDropDeck apiClient={apiClientRef.current} />
+          )}
 
-        {activeTab === 'terminal' && (
-          <RemoteConsoleDeck apiClient={apiClientRef.current} />
-        )}
-      </ScrollView>
+          {activeTab === 'terminal' && (
+            <RemoteConsoleDeck apiClient={apiClientRef.current} />
+          )}
+        </View>
+      )}
 
       {/* Bottom Navigation Tab Bar */}
       <View
@@ -582,6 +615,7 @@ function DeckCompMain() {
         onClose={() => setDrawerVisible(false)}
         currentDevice={currentDevice}
         devices={devices}
+        networkStatus={networkStatus}
         onSelectDevice={handleSelectDevice}
         onRemoveDevice={handleRemoveDevice}
         onOpenPairingModal={() => setPairingModalVisible(true)}
@@ -631,6 +665,14 @@ const styles = StyleSheet.create({
   mainContainer: {
     flex: 1,
     backgroundColor: Palette.base,
+  },
+  staticTabContainer: {
+    flex: 1,
+    backgroundColor: Palette.base,
+  },
+  deckContainer: {
+    flex: 1,
+    justifyContent: 'flex-start',
   },
   scroll: {
     flex: 1,

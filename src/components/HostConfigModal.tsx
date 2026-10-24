@@ -168,7 +168,7 @@ export const HostConfigModal: React.FC<HostConfigModalProps> = ({
             activeOpacity={0.7}
           >
             <View style={styles.toggleTextContainer}>
-              <Text style={styles.toggleTitle}>Enable 'Fun Stuff' Tab</Text>
+              <Text style={styles.toggleTitle}>Enable 'Visuals' Tab</Text>
               <Text style={styles.toggleSubtitle}>
                 Show visualizers, eye-candy & custom presets in navigation
               </Text>

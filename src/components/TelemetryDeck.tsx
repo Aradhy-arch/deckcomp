@@ -39,14 +39,14 @@ export const TelemetryDeck: React.FC<TelemetryDeckProps> = ({
           <View style={styles.headerRow}>
             <View style={styles.labelRow}>
               <Laptop size={13} color={Palette.overlay1} style={styles.headerIcon} />
-              <Text style={styles.deviceLabel}>Workstation</Text>
+              <Text style={styles.deviceLabel} numberOfLines={1}>Workstation</Text>
             </View>
             {isHostCharging && (
               <Zap size={12} color={Palette.green} />
             )}
           </View>
-          <Text style={styles.percentText}>{hostPercent}</Text>
-          <Text style={styles.detailText}>
+          <Text style={styles.percentText} numberOfLines={1}>{hostPercent}</Text>
+          <Text style={styles.detailText} numberOfLines={1} ellipsizeMode="tail">
             {hostBat?.power_supply_name || (hostTelemetry?.ac_connected ? 'Mains Power' : 'Linux Host')}
           </Text>
         </View>
@@ -59,14 +59,14 @@ export const TelemetryDeck: React.FC<TelemetryDeckProps> = ({
           <View style={styles.headerRow}>
             <View style={styles.labelRow}>
               <Smartphone size={13} color={Palette.overlay1} style={styles.headerIcon} />
-              <Text style={styles.deviceLabel}>Phone</Text>
+              <Text style={styles.deviceLabel} numberOfLines={1}>Phone</Text>
             </View>
             {isPhoneCharging && (
               <Zap size={12} color={Palette.green} />
             )}
           </View>
-          <Text style={styles.percentText}>{phonePercent}</Text>
-          <Text style={styles.detailText}>
+          <Text style={styles.percentText} numberOfLines={1}>{phonePercent}</Text>
+          <Text style={styles.detailText} numberOfLines={1} ellipsizeMode="tail">
             {clientBattery.isLowPower ? 'Battery Saver' : 'Android Client'}
           </Text>
         </View>
@@ -78,13 +78,13 @@ export const TelemetryDeck: React.FC<TelemetryDeckProps> = ({
 const styles = StyleSheet.create({
   container: {
     marginHorizontal: 16,
-    marginTop: 14,
+    marginTop: 10,
   },
   card: {
     flexDirection: 'row',
     backgroundColor: Palette.surface0,
     borderRadius: 14,
-    paddingVertical: 14,
+    paddingVertical: 12,
     paddingHorizontal: 16,
     borderWidth: 1,
     borderColor: Palette.surface1,
@@ -103,7 +103,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 4,
+    marginBottom: 2,
   },
   labelRow: {
     flexDirection: 'row',
@@ -113,12 +113,12 @@ const styles = StyleSheet.create({
     marginRight: 4,
   },
   deviceLabel: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '600',
     color: Palette.subtext0,
   },
   percentText: {
-    fontSize: 20,
+    fontSize: 18,
     fontWeight: '700',
     color: Palette.text,
     letterSpacing: -0.3,
@@ -126,6 +126,6 @@ const styles = StyleSheet.create({
   detailText: {
     fontSize: 11,
     color: Palette.overlay0,
-    marginTop: 2,
+    marginTop: 1,
   },
 });

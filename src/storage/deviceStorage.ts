@@ -19,15 +19,19 @@ export async function loadDevices(): Promise<DeviceConfig[]> {
   try {
     const raw = await AsyncStorage.getItem(STORAGE_KEY_DEVICES);
     if (!raw) {
-      return [DEFAULT_DEVICE];
+      return [];
     }
     const parsed = JSON.parse(raw);
-    if (Array.isArray(parsed) && parsed.length > 0) {
-      return parsed;
+    if (Array.isArray(parsed)) {
+      // Filter out any legacy empty dummy workstation
+      const valid = parsed.filter(
+        (d: DeviceConfig) => d && (d.id !== 'default_workstation' || (d.hostIp && d.hostIp.trim() !== ''))
+      );
+      return valid;
     }
-    return [DEFAULT_DEVICE];
+    return [];
   } catch {
-    return [DEFAULT_DEVICE];
+    return [];
   }
 }
 
@@ -40,7 +44,7 @@ export async function getActiveDeviceId(): Promise<string> {
     const active = await AsyncStorage.getItem(STORAGE_KEY_ACTIVE_DEVICE_ID);
     if (active) return active;
   } catch {}
-  return DEFAULT_DEVICE.id;
+  return '';
 }
 
 export async function setActiveDeviceId(id: string): Promise<void> {
@@ -49,13 +53,17 @@ export async function setActiveDeviceId(id: string): Promise<void> {
 
 export async function addOrUpdateDevice(device: DeviceConfig): Promise<DeviceConfig[]> {
   const current = await loadDevices();
-  const index = current.findIndex((d) => d.id === device.id);
+  // Filter out any dummy placeholder workstation without valid IP
+  const filtered = current.filter(
+    (d) => d.id !== 'default_workstation' || (d.hostIp && d.hostIp.trim() !== '')
+  );
+  const index = filtered.findIndex((d) => d.id === device.id);
   let updated: DeviceConfig[];
   if (index >= 0) {
-    updated = [...current];
+    updated = [...filtered];
     updated[index] = { ...updated[index], ...device };
   } else {
-    updated = [...current, device];
+    updated = [...filtered, device];
   }
   await saveDevices(updated);
   return updated;

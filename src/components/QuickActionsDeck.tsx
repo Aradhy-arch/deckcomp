@@ -134,11 +134,11 @@ export const QuickActionsDeck: React.FC<QuickActionsDeckProps> = ({ apiClient })
             {activeAction === 'push_clip' ? (
               <ActivityIndicator size="small" color={Palette.mauve} />
             ) : (
-              <ClipboardCopy size={20} color={Palette.mauve} />
+              <ClipboardCopy size={19} color={Palette.mauve} />
             )}
           </View>
-          <Text style={styles.tileTitle}>Push Clip</Text>
-          <Text style={styles.tileSub}>Phone → PC</Text>
+          <Text style={styles.tileTitle} numberOfLines={1}>Push Clip</Text>
+          <Text style={styles.tileSub} numberOfLines={1}>Phone → PC</Text>
         </TouchableOpacity>
 
         {/* Pull Clipboard */}
@@ -152,11 +152,11 @@ export const QuickActionsDeck: React.FC<QuickActionsDeckProps> = ({ apiClient })
             {activeAction === 'pull_clip' ? (
               <ActivityIndicator size="small" color={Palette.mauve} />
             ) : (
-              <ClipboardPaste size={20} color={Palette.mauve} />
+              <ClipboardPaste size={19} color={Palette.mauve} />
             )}
           </View>
-          <Text style={styles.tileTitle}>Pull Clip</Text>
-          <Text style={styles.tileSub}>PC → Phone</Text>
+          <Text style={styles.tileTitle} numberOfLines={1}>Pull Clip</Text>
+          <Text style={styles.tileSub} numberOfLines={1}>PC → Phone</Text>
         </TouchableOpacity>
 
         {/* Lock Screen */}
@@ -170,11 +170,11 @@ export const QuickActionsDeck: React.FC<QuickActionsDeckProps> = ({ apiClient })
             {activeAction === 'lock' ? (
               <ActivityIndicator size="small" color={Palette.mauve} />
             ) : (
-              <Lock size={20} color={Palette.mauve} />
+              <Lock size={19} color={Palette.mauve} />
             )}
           </View>
-          <Text style={styles.tileTitle}>Lock Session</Text>
-          <Text style={styles.tileSub}>Wayland lock</Text>
+          <Text style={styles.tileTitle} numberOfLines={1}>Lock Session</Text>
+          <Text style={styles.tileSub} numberOfLines={1}>Wayland lock</Text>
         </TouchableOpacity>
 
         {/* Toggle Power Controls */}
@@ -184,17 +184,17 @@ export const QuickActionsDeck: React.FC<QuickActionsDeckProps> = ({ apiClient })
           activeOpacity={0.7}
         >
           <View style={styles.tileIconBox}>
-            <Power size={20} color={showPower ? Palette.red : Palette.subtext0} />
+            <Power size={19} color={showPower ? Palette.red : Palette.subtext0} />
           </View>
-          <Text style={styles.tileTitle}>Power</Text>
-          <Text style={styles.tileSub}>{showPower ? 'Hide options' : 'Options...'}</Text>
+          <Text style={styles.tileTitle} numberOfLines={1}>Power</Text>
+          <Text style={styles.tileSub} numberOfLines={1}>{showPower ? 'Hide' : 'Options...'}</Text>
         </TouchableOpacity>
       </View>
 
       {/* Floating Status Feedback Toast */}
       {feedback && (
         <View style={styles.feedbackToast}>
-          <Text style={styles.feedbackText}>{feedback}</Text>
+          <Text style={styles.feedbackText} numberOfLines={1}>{feedback}</Text>
         </View>
       )}
 
@@ -248,26 +248,28 @@ export const QuickActionsDeck: React.FC<QuickActionsDeckProps> = ({ apiClient })
 const styles = StyleSheet.create({
   container: {
     marginHorizontal: 16,
-    marginTop: 14,
+    marginTop: 10,
   },
   sectionHeader: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '600',
     color: Palette.subtext0,
-    marginBottom: 8,
+    marginBottom: 6,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
   },
   grid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     justifyContent: 'space-between',
-    rowGap: 10,
+    rowGap: 8,
   },
   gridTile: {
     width: '48.5%',
     backgroundColor: Palette.surface0,
     borderRadius: 12,
-    paddingVertical: 12,
-    paddingHorizontal: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 8,
     alignItems: 'center',
     borderWidth: 1,
     borderColor: Palette.surface1,
@@ -279,48 +281,48 @@ const styles = StyleSheet.create({
   tileIconBox: {
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 6,
+    marginBottom: 4,
   },
   tileTitle: {
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: '600',
     color: Palette.text,
   },
   tileSub: {
-    fontSize: 11,
+    fontSize: 10,
     color: Palette.overlay0,
-    marginTop: 2,
+    marginTop: 1,
     textAlign: 'center',
   },
   feedbackToast: {
     backgroundColor: Palette.surface1,
     borderRadius: 8,
-    paddingVertical: 8,
+    paddingVertical: 6,
     paddingHorizontal: 12,
     borderWidth: 1,
     borderColor: Palette.teal,
     alignItems: 'center',
-    marginBottom: 10,
+    marginTop: 8,
   },
   feedbackText: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '600',
     color: Palette.teal,
   },
   powerCard: {
     backgroundColor: Palette.surface0,
     borderRadius: 12,
-    padding: 12,
+    padding: 10,
     borderWidth: 1,
     borderColor: Palette.surface2,
-    marginBottom: 10,
+    marginTop: 8,
   },
   powerCardHeader: {
     fontSize: 9,
     fontWeight: '800',
     color: Palette.subtext0,
     letterSpacing: 0.5,
-    marginBottom: 8,
+    marginBottom: 6,
     textAlign: 'center',
   },
   powerRow: {
@@ -329,7 +331,7 @@ const styles = StyleSheet.create({
   },
   powerBtn: {
     flex: 1,
-    paddingVertical: 8,
+    paddingVertical: 7,
     borderRadius: 8,
     backgroundColor: Palette.surface1,
     borderWidth: 1,
@@ -337,7 +339,7 @@ const styles = StyleSheet.create({
     marginHorizontal: 3,
   },
   powerBtnText: {
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: '700',
   },
 });
