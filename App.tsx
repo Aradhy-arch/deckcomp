@@ -507,6 +507,15 @@ function DeckCompMain() {
         >
           <FunStuffDeck apiClient={apiClientRef.current} />
         </ScrollView>
+      ) : activeTab === 'drop' ? (
+        <ScrollView
+          style={styles.scroll}
+          contentContainerStyle={styles.scrollContent}
+          showsVerticalScrollIndicator={true}
+          keyboardShouldPersistTaps="handled"
+        >
+          <FileDropDeck apiClient={apiClientRef.current} />
+        </ScrollView>
       ) : (
         <View style={styles.staticTabContainer}>
           {activeTab === 'deck' && (
@@ -522,10 +531,6 @@ function DeckCompMain() {
               />
               <QuickActionsDeck apiClient={apiClientRef.current} />
             </View>
-          )}
-
-          {activeTab === 'drop' && (
-            <FileDropDeck apiClient={apiClientRef.current} />
           )}
 
           {activeTab === 'terminal' && (

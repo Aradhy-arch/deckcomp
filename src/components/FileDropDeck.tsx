@@ -145,7 +145,7 @@ export const FileDropDeck: React.FC<FileDropDeckProps> = ({ apiClient }) => {
         );
         results.push(dropRes);
       } catch (err: unknown) {
-        errors.push(`${file.name}: ${formatErrorMessage(err, 'Host is disconnected')}`);
+        errors.push(`${file.name}: ${formatErrorMessage(err, 'An error occurred')}`);
       }
     }
 
@@ -178,7 +178,7 @@ export const FileDropDeck: React.FC<FileDropDeckProps> = ({ apiClient }) => {
       const uri = await getSavedDownloadDirectoryUri();
       setDownloadFolderUri(uri);
     } catch (err: unknown) {
-      setErrorMsg(formatErrorMessage(err, 'Host is disconnected'));
+      setErrorMsg(formatErrorMessage(err, 'An error occurred'));
     } finally {
       setDownloadingId(null);
     }
@@ -191,7 +191,6 @@ export const FileDropDeck: React.FC<FileDropDeckProps> = ({ apiClient }) => {
     }
     setDownloadingAll(true);
     setErrorMsg(null);
-
     const total = pendingShares.length;
     let downloadedCount = 0;
     let lastSavedPath = 'Downloads';
@@ -212,7 +211,7 @@ export const FileDropDeck: React.FC<FileDropDeckProps> = ({ apiClient }) => {
         lastSavedPath = res.savedPath;
         setPendingShares((prev) => prev.filter((p) => p.id !== item.id));
       } catch (err: unknown) {
-        errors.push(`${item.filename}: ${formatErrorMessage(err, 'Host is disconnected')}`);
+        errors.push(`${item.filename}: ${formatErrorMessage(err, 'An error occurred')}`);
       }
     }
 

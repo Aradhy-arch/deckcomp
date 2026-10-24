@@ -65,19 +65,40 @@ export function isHostDisconnectedError(err: unknown): boolean {
  * Normalizes any error message for UI display.
  * If the host is unreachable, disconnected, or socket permission denied,
  * returns "Host is disconnected".
+ * Any other technical/native exception strings are sanitized to "An error occurred".
  */
-export function formatErrorMessage(err: unknown, fallback: string = 'Host is disconnected'): string {
+export function formatErrorMessage(err: unknown, fallback: string = 'An error occurred'): string {
   if (!err) return fallback;
   if (isHostDisconnectedError(err)) {
     return 'Host is disconnected';
   }
+  let message = '';
   if (err instanceof ApiErrorResponse) {
-    return err.detail || fallback;
+    message = err.detail || '';
+  } else if (err instanceof Error) {
+    message = err.message || '';
+  } else {
+    message = String(err);
   }
-  if (err instanceof Error) {
-    return err.message || fallback;
+
+  // Sanitize internal native module, Java, OkHttp, or cryptic filesystem exceptions
+  if (
+    !message ||
+    /call to function/i.test(message) ||
+    /has been rejected/i.test(message) ||
+    /unreadable/i.test(message) ||
+    /exponentfilesystem/i.test(message) ||
+    /java\./i.test(message) ||
+    /okhttp/i.test(message) ||
+    /exception/i.test(message) ||
+    /nullpointer/i.test(message) ||
+    /undefined/i.test(message) ||
+    /errno/i.test(message)
+  ) {
+    return 'An error occurred';
   }
-  return String(err);
+
+  return message;
 }
 
 export class ApiClient {
@@ -261,97 +282,70 @@ export class ApiClient {
     filename: string,
     mimeType: string = 'application/octet-stream'
   ): Promise<DropResult> {
-    let uploadFileUri = uri;
-    let tempFileCreated = false;
+    const authQuery = this.authToken ? `?token=${encodeURIComponent(this.authToken)}` : '';
+    const uploadUrl = `${this.baseUrl}/drop${authQuery}`;
 
-    try {
-      // 1. Android content:// URIs must be spooled to a local cache file with file:// scheme
-      // because native FileSystem.uploadAsync expects a direct filesystem file path.
-      if (uri.startsWith('content://')) {
-        const sanitized = filename.replace(/[^a-zA-Z0-9._-]/g, '_');
-        const tempUri = `${FileSystem.cacheDirectory}drop_${Date.now()}_${sanitized}`;
-        await FileSystem.copyAsync({ from: uri, to: tempUri });
-        uploadFileUri = tempUri;
-        tempFileCreated = true;
-      }
-
-      const authQuery = this.authToken ? `?token=${encodeURIComponent(this.authToken)}` : '';
-      const uploadUrl = `${this.baseUrl}/drop${authQuery}`;
-
-      // 2. Primary: Native multipart upload via FileSystem.uploadAsync
+    return new Promise<DropResult>((resolve, reject) => {
       try {
-        const result = await FileSystem.uploadAsync(uploadUrl, uploadFileUri, {
-          fieldName: 'file',
-          httpMethod: 'POST',
-          uploadType: FileSystem.FileSystemUploadType.MULTIPART,
-          mimeType: mimeType || 'application/octet-stream',
-          parameters: {
-            filename: filename,
-          },
-          headers: {
-            Accept: 'application/json',
-            ...(this.authToken ? { Authorization: `Bearer ${this.authToken}` } : {}),
-          },
-        });
+        const xhr = new XMLHttpRequest();
+        xhr.open('POST', uploadUrl);
 
-        if (result.status >= 200 && result.status < 300) {
-          const data = JSON.parse(result.body);
-          return data as DropResult;
+        if (this.authToken) {
+          xhr.setRequestHeader('Authorization', `Bearer ${this.authToken}`);
         }
+        xhr.setRequestHeader('Accept', 'application/json');
 
-        let errorDetail = `Upload failed with HTTP ${result.status}`;
-        try {
-          const errData = JSON.parse(result.body);
-          if (errData?.detail) errorDetail = errData.detail;
-        } catch {}
-        throw new ApiErrorResponse(errorDetail, `HTTP_${result.status}`);
-      } catch (uploadAsyncErr: unknown) {
-        if (uploadAsyncErr instanceof ApiErrorResponse) {
-          throw uploadAsyncErr;
-        }
-        // 3. Fallback: Fetch with FormData
+        xhr.onload = () => {
+          if (xhr.status >= 200 && xhr.status < 300) {
+            try {
+              const data = JSON.parse(xhr.responseText);
+              resolve(data as DropResult);
+            } catch {
+              resolve({
+                status: 'saved',
+                original_filename: filename,
+                saved_filename: filename,
+                path: `Downloads/${filename}`,
+                size_bytes: 0,
+              });
+            }
+          } else {
+            let errorDetail = 'An error occurred';
+            try {
+              const errData = JSON.parse(xhr.responseText);
+              if (errData?.detail) {
+                errorDetail = errData.detail;
+              }
+            } catch {}
+            reject(new ApiErrorResponse(errorDetail, `HTTP_${xhr.status}`));
+          }
+        };
+
+        xhr.onerror = () => {
+          reject(new ApiErrorResponse('An error occurred', 'UPLOAD_ERROR'));
+        };
+
+        xhr.ontimeout = () => {
+          reject(new ApiErrorResponse('Host is disconnected', 'HOST_DISCONNECTED'));
+        };
+
         const formData = new FormData();
         formData.append('file', {
-          uri: uploadFileUri,
+          uri,
           name: filename,
           type: mimeType || 'application/octet-stream',
         } as any);
         formData.append('filename', filename);
 
-        const response = await fetch(uploadUrl, {
-          method: 'POST',
-          body: formData,
-          headers: {
-            Accept: 'application/json',
-            ...(this.authToken ? { Authorization: `Bearer ${this.authToken}` } : {}),
-          },
-        });
-
-        if (response.ok) {
-          const data = await response.json();
-          return data as DropResult;
+        xhr.send(formData);
+      } catch (err: unknown) {
+        if (isHostDisconnectedError(err)) {
+          reject(new ApiErrorResponse('Host is disconnected', 'HOST_DISCONNECTED'));
+        } else {
+          reject(new ApiErrorResponse('An error occurred', 'UPLOAD_ERROR'));
         }
-
-        const errData = await response.json().catch(() => null);
-        const detail = errData?.detail || `Upload failed with HTTP ${response.status}`;
-        throw new ApiErrorResponse(detail, `HTTP_${response.status}`);
       }
-    } catch (err: unknown) {
-      if (err instanceof ApiErrorResponse) {
-        throw err;
-      }
-      if (isHostDisconnectedError(err)) {
-        throw new ApiErrorResponse('Host is disconnected', 'HOST_DISCONNECTED');
-      }
-      if (err instanceof Error) {
-        throw new ApiErrorResponse(err.message, 'UPLOAD_ERROR');
-      }
-      throw new ApiErrorResponse('Host is disconnected', 'HOST_DISCONNECTED');
-    } finally {
-      if (tempFileCreated && uploadFileUri) {
-        await FileSystem.deleteAsync(uploadFileUri, { idempotent: true }).catch(() => {});
-      }
-    }
+    });
   }
 
   // 9. Pairing & Multi-device Authentication
