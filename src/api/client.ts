@@ -142,7 +142,7 @@ export class ApiClient {
   }
 
   async healthCheck(): Promise<{ status: string; hostname: string; version: string }> {
-    return this.request<{ status: string; hostname: string; version: string }>('/health', { method: 'GET' }, 3000);
+    return this.request<{ status: string; hostname: string; version: string }>('/health', { method: 'GET' }, 6000);
   }
 
   async getHostTelemetry(): Promise<HostTelemetry> {
@@ -261,33 +261,81 @@ export class ApiClient {
     filename: string,
     mimeType: string = 'application/octet-stream'
   ): Promise<DropResult> {
-    try {
-      const uploadUrl = `${this.baseUrl}/drop`;
-      const result = await FileSystem.uploadAsync(uploadUrl, uri, {
-        fieldName: 'file',
-        httpMethod: 'POST',
-        uploadType: FileSystem.FileSystemUploadType.MULTIPART,
-        mimeType: mimeType || 'application/octet-stream',
-        parameters: {
-          filename: filename,
-        },
-        headers: {
-          Accept: 'application/json',
-          ...(this.authToken ? { Authorization: `Bearer ${this.authToken}` } : {}),
-        },
-      });
+    let uploadFileUri = uri;
+    let tempFileCreated = false;
 
-      if (result.status < 200 || result.status >= 300) {
+    try {
+      // 1. Android content:// URIs must be spooled to a local cache file with file:// scheme
+      // because native FileSystem.uploadAsync expects a direct filesystem file path.
+      if (uri.startsWith('content://')) {
+        const sanitized = filename.replace(/[^a-zA-Z0-9._-]/g, '_');
+        const tempUri = `${FileSystem.cacheDirectory}drop_${Date.now()}_${sanitized}`;
+        await FileSystem.copyAsync({ from: uri, to: tempUri });
+        uploadFileUri = tempUri;
+        tempFileCreated = true;
+      }
+
+      const authQuery = this.authToken ? `?token=${encodeURIComponent(this.authToken)}` : '';
+      const uploadUrl = `${this.baseUrl}/drop${authQuery}`;
+
+      // 2. Primary: Native multipart upload via FileSystem.uploadAsync
+      try {
+        const result = await FileSystem.uploadAsync(uploadUrl, uploadFileUri, {
+          fieldName: 'file',
+          httpMethod: 'POST',
+          uploadType: FileSystem.FileSystemUploadType.MULTIPART,
+          mimeType: mimeType || 'application/octet-stream',
+          parameters: {
+            filename: filename,
+          },
+          headers: {
+            Accept: 'application/json',
+            ...(this.authToken ? { Authorization: `Bearer ${this.authToken}` } : {}),
+          },
+        });
+
+        if (result.status >= 200 && result.status < 300) {
+          const data = JSON.parse(result.body);
+          return data as DropResult;
+        }
+
         let errorDetail = `Upload failed with HTTP ${result.status}`;
         try {
           const errData = JSON.parse(result.body);
           if (errData?.detail) errorDetail = errData.detail;
         } catch {}
         throw new ApiErrorResponse(errorDetail, `HTTP_${result.status}`);
-      }
+      } catch (uploadAsyncErr: unknown) {
+        if (uploadAsyncErr instanceof ApiErrorResponse) {
+          throw uploadAsyncErr;
+        }
+        // 3. Fallback: Fetch with FormData
+        const formData = new FormData();
+        formData.append('file', {
+          uri: uploadFileUri,
+          name: filename,
+          type: mimeType || 'application/octet-stream',
+        } as any);
+        formData.append('filename', filename);
 
-      const data = JSON.parse(result.body);
-      return data as DropResult;
+        const response = await fetch(uploadUrl, {
+          method: 'POST',
+          body: formData,
+          headers: {
+            Accept: 'application/json',
+            ...(this.authToken ? { Authorization: `Bearer ${this.authToken}` } : {}),
+          },
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          return data as DropResult;
+        }
+
+        const errData = await response.json().catch(() => null);
+        const detail = errData?.detail || `Upload failed with HTTP ${response.status}`;
+        throw new ApiErrorResponse(detail, `HTTP_${response.status}`);
+      }
     } catch (err: unknown) {
       if (err instanceof ApiErrorResponse) {
         throw err;
@@ -299,6 +347,10 @@ export class ApiClient {
         throw new ApiErrorResponse(err.message, 'UPLOAD_ERROR');
       }
       throw new ApiErrorResponse('Host is disconnected', 'HOST_DISCONNECTED');
+    } finally {
+      if (tempFileCreated && uploadFileUri) {
+        await FileSystem.deleteAsync(uploadFileUri, { idempotent: true }).catch(() => {});
+      }
     }
   }
 

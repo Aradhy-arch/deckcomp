@@ -105,6 +105,12 @@ function DeckCompMain() {
   const apiClientRef = useRef<ApiClient | null>(null);
   const configGenRef = useRef(0);
   const notifiedSharesRef = useRef<Set<string>>(new Set());
+  const failedPingsCountRef = useRef(0);
+  const clientBatteryRef = useRef(clientBattery);
+
+  useEffect(() => {
+    clientBatteryRef.current = clientBattery;
+  }, [clientBattery]);
 
   // Initialize Host Config from AsyncStorage
   useEffect(() => {
@@ -254,6 +260,7 @@ function DeckCompMain() {
       const health = await client.healthCheck();
       if (!isMountedRef.current || configGenRef.current !== currentGen) return;
 
+      failedPingsCountRef.current = 0;
       setHostname(health.hostname);
       setNetworkStatus('online');
       setErrorMessage(null);
@@ -284,22 +291,27 @@ function DeckCompMain() {
       }
 
       // 3. Sync client battery if available
-      if (clientBattery.batteryLevel !== null) {
+      const currentBat = clientBatteryRef.current;
+      if (currentBat.batteryLevel !== null) {
         client.sendClientTelemetry(
-          clientBattery.batteryLevel,
-          clientBattery.batteryState,
+          currentBat.batteryLevel,
+          currentBat.batteryState,
           'Android Client'
         ).catch(() => {});
       }
     } catch (err: unknown) {
       if (isMountedRef.current && configGenRef.current === currentGen) {
-        setNetworkStatus('offline');
-        setErrorMessage(formatErrorMessage(err, 'Host is disconnected'));
+        failedPingsCountRef.current += 1;
+        // Require 2 consecutive failed health checks before transitioning to offline banner
+        if (failedPingsCountRef.current >= 2) {
+          setNetworkStatus('offline');
+          setErrorMessage(formatErrorMessage(err, 'Host is disconnected'));
+        }
       }
     } finally {
       isPollingRef.current = false;
     }
-  }, [hostAddressLoaded, clientBattery]);
+  }, [hostAddressLoaded, hostConfig.hostIp]);
 
   // Periodic polling management with 12s interval and AppState guard
   useEffect(() => {
@@ -335,6 +347,7 @@ function DeckCompMain() {
 
   // Manual pull-to-refresh: immediately re-reads phone battery and workstation metrics
   const handleRefresh = async () => {
+    failedPingsCountRef.current = 0;
     setRefreshing(true);
     try {
       // 1. Fresh query for phone battery metrics
@@ -371,6 +384,7 @@ function DeckCompMain() {
 
   // Device switching and management
   const handleSelectDevice = async (device: DeviceConfig) => {
+    failedPingsCountRef.current = 0;
     setCurrentDevice(device);
     await setActiveDeviceId(device.id);
     const updatedConfig: HostConfig = {

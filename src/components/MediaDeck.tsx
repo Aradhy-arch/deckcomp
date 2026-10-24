@@ -37,11 +37,14 @@ export const MediaDeck: React.FC<MediaDeckProps> = ({
   const [localVolume, setLocalVolume] = useState<number>(mediaStatus?.volume ?? 0.5);
   const [localMuted, setLocalMuted] = useState<boolean>(mediaStatus?.muted ?? false);
   const [isInteracting, setIsInteracting] = useState(false);
-  const trackWidthRef = useRef<number>(200);
 
-  // Sync from props when user is not actively touching the volume slider
+  const trackRef = useRef<any>(null);
+  const trackLayoutRef = useRef<{ pageX: number; width: number }>({ pageX: 0, width: 200 });
+  const cooldownUntilRef = useRef<number>(0);
+
+  // Sync from props when user is not actively touching the volume slider and cooldown has expired
   useEffect(() => {
-    if (!isInteracting && mediaStatus) {
+    if (!isInteracting && mediaStatus && Date.now() > cooldownUntilRef.current) {
       setLocalVolume(mediaStatus.volume);
       setLocalMuted(mediaStatus.muted);
     }
@@ -62,6 +65,7 @@ export const MediaDeck: React.FC<MediaDeckProps> = ({
 
   const handleVolumeStep = async (direction: 'up' | 'down') => {
     if (!apiClient) return;
+    cooldownUntilRef.current = Date.now() + 2500;
     const delta = direction === 'up' ? 0.05 : -0.05;
     const next = Math.max(0, Math.min(1, Math.round((localVolume + delta) * 100) / 100));
     setLocalVolume(next);
@@ -81,6 +85,7 @@ export const MediaDeck: React.FC<MediaDeckProps> = ({
 
   const handleToggleMute = async () => {
     if (!apiClient) return;
+    cooldownUntilRef.current = Date.now() + 2500;
     const nextMute = !localMuted;
     setLocalMuted(nextMute);
     try {
@@ -89,27 +94,35 @@ export const MediaDeck: React.FC<MediaDeckProps> = ({
         setLocalMuted(res.muted);
       }
     } catch {
-      // Revert on error
       setLocalMuted(!nextMute);
     }
   };
 
-  const handleTrackLayout = (e: LayoutChangeEvent) => {
-    const { width } = e.nativeEvent.layout;
-    if (width > 0) {
-      trackWidthRef.current = width;
-    }
+  const measureTrack = () => {
+    trackRef.current?.measure((_x: number, _y: number, width: number, _height: number, pageX: number) => {
+      if (width > 0) {
+        trackLayoutRef.current = { pageX, width };
+      }
+    });
+  };
+
+  const handleTrackLayout = (_e: LayoutChangeEvent) => {
+    measureTrack();
   };
 
   const calculateRatioFromEvent = (evt: GestureResponderEvent): number => {
-    const x = evt.nativeEvent.locationX;
-    const width = trackWidthRef.current || 200;
-    const clampedRatio = Math.max(0, Math.min(1, x / width));
+    const { pageX: trackPageX, width } = trackLayoutRef.current;
+    const touchPageX = evt.nativeEvent.pageX;
+    const effectiveWidth = width > 0 ? width : 200;
+    const relativeX = touchPageX - trackPageX;
+    const clampedRatio = Math.max(0, Math.min(1, relativeX / effectiveWidth));
     return Math.round(clampedRatio * 100) / 100;
   };
 
   const handleTouchStart = (evt: GestureResponderEvent) => {
+    measureTrack();
     setIsInteracting(true);
+    cooldownUntilRef.current = Date.now() + 3000;
     const newVol = calculateRatioFromEvent(evt);
     setLocalVolume(newVol);
     if (localMuted && newVol > 0) {
@@ -126,6 +139,7 @@ export const MediaDeck: React.FC<MediaDeckProps> = ({
     const newVol = calculateRatioFromEvent(evt);
     setLocalVolume(newVol);
     setIsInteracting(false);
+    cooldownUntilRef.current = Date.now() + 2500;
     if (!apiClient) return;
     try {
       const res = await apiClient.adjustVolume('set', 5, newVol);
@@ -201,18 +215,24 @@ export const MediaDeck: React.FC<MediaDeckProps> = ({
             <Minus size={14} color={Palette.text} />
           </TouchableOpacity>
 
-          {/* Interactive touch/drag slider track */}
+          {/* Interactive touch/drag slider track with pure absolute pageX tracking */}
           <View
+            ref={trackRef}
             style={styles.volTrack}
             onLayout={handleTrackLayout}
             onStartShouldSetResponder={() => true}
             onMoveShouldSetResponder={() => true}
+            onResponderTerminationRequest={() => false}
             onResponderGrant={handleTouchStart}
             onResponderMove={handleTouchMove}
             onResponderRelease={handleTouchEnd}
-            onResponderTerminate={() => setIsInteracting(false)}
+            onResponderTerminate={() => {
+              setIsInteracting(false);
+              cooldownUntilRef.current = Date.now() + 1500;
+            }}
           >
             <View
+              pointerEvents="none"
               style={[
                 styles.volFill,
                 {
@@ -223,6 +243,7 @@ export const MediaDeck: React.FC<MediaDeckProps> = ({
             />
             {/* Draggable indicator knob */}
             <View
+              pointerEvents="none"
               style={[
                 styles.sliderKnob,
                 {
@@ -230,7 +251,7 @@ export const MediaDeck: React.FC<MediaDeckProps> = ({
                 },
               ]}
             />
-            <Text style={styles.volLabel}>
+            <Text pointerEvents="none" style={styles.volLabel}>
               {localMuted ? 'Muted' : `${volumePercent}%`}
             </Text>
           </View>
