@@ -175,8 +175,8 @@ class OutboxService:
         size_kb = max(1, file_size // 1024)
         size_str = f"{size_kb} KB" if size_kb < 1024 else f"{size_kb / 1024:.1f} MB"
         self._dispatch_notification(
-            "DeckComp File Staged",
-            f"Staged '{filename}' ({size_str}) for phone download.",
+            "DeckComp • Sending to Phone",
+            f"Staged '{filename}' ({size_str}) waiting for phone transfer.",
         )
         logger.info(f"Staged file '{filename}' with ID {file_id}")
         return {
@@ -258,6 +258,10 @@ class OutboxService:
             except Exception:
                 pass
 
+        self._dispatch_notification(
+            "DeckComp • Transfer Complete",
+            f"Phone received '{item.get('filename', 'file')}'.",
+        )
         logger.info(f"Removed staged file {file_id} from outbox.")
         return True
 

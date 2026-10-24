@@ -15,6 +15,29 @@ from subprocess_runner import run_async_subprocess
 
 
 class FileDropService:
+    async def _dispatch_desktop_notification(self, title: str, message: str, icon: str = "document-save") -> bool:
+        notify_bin = shutil.which("notify-send")
+        if not notify_bin:
+            return False
+        try:
+            env = resolve_graphical_env()
+        except Exception:
+            env = os.environ.copy()
+            uid = os.getuid()
+            env.setdefault("XDG_RUNTIME_DIR", f"/run/user/{uid}")
+            env.setdefault("DBUS_SESSION_BUS_ADDRESS", f"unix:path=/run/user/{uid}/bus")
+            env.setdefault("DISPLAY", ":0")
+
+        try:
+            await run_async_subprocess(
+                [notify_bin, "-u", "normal", "-a", "DeckComp", "-i", icon, title, message],
+                timeout_sec=3.0,
+                env=env,
+            )
+            return True
+        except Exception:
+            return False
+
     def sanitize_filename(self, raw_filename: str) -> str:
         """
         Derives safe filename from client input.
@@ -45,6 +68,15 @@ class FileDropService:
 
         original_filename = override_filename or upload_file.filename or "drop.bin"
         safe_name = self.sanitize_filename(original_filename)
+
+        # Notify PC desktop that phone is sending a file
+        asyncio.create_task(
+            self._dispatch_desktop_notification(
+                "DeckComp • Incoming File",
+                f"Phone is sending '{safe_name}'...",
+                icon="document-send",
+            )
+        )
 
         # Temporary file path with UUID
         temp_filename = f".tmp_{uuid.uuid4().hex}_{safe_name}"
@@ -100,28 +132,12 @@ class FileDropService:
             size_str = f"{total_bytes / (1024 * 1024):.1f} MB"
 
         # Safe notification dispatch with bounded wait
-        notification_dispatched = False
-        notify_bin = shutil.which("notify-send")
-        if notify_bin:
-            try:
-                env = resolve_graphical_env()
-            except Exception:
-                env = os.environ.copy()
-                uid = os.getuid()
-                env.setdefault("XDG_RUNTIME_DIR", f"/run/user/{uid}")
-                env.setdefault("DBUS_SESSION_BUS_ADDRESS", f"unix:path=/run/user/{uid}/bus")
-                env.setdefault("DISPLAY", ":0")
-
-            try:
-                notification_msg = f"Saved '{final_name}' ({size_str}) from phone to ~/Downloads"
-                await run_async_subprocess(
-                    [notify_bin, "-u", "normal", "-a", "DeckComp", "-i", "document-save", "DeckComp • File Received", notification_msg],
-                    timeout_sec=3.0,
-                    env=env
-                )
-                notification_dispatched = True
-            except Exception:
-                notification_dispatched = False
+        notification_msg = f"Saved '{final_name}' ({size_str}) from phone to ~/Downloads"
+        notification_dispatched = await self._dispatch_desktop_notification(
+            "DeckComp • File Received",
+            notification_msg,
+            icon="document-save",
+        )
 
         # Strictly sanitize original_filename for the response envelope
         safe_original = re.sub(r'[\x00-\x1f\x7f]', '', original_filename).strip()[:200] or "drop.bin"
