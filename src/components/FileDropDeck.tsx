@@ -42,6 +42,9 @@ export const FileDropDeck: React.FC<FileDropDeckProps> = ({ apiClient }) => {
     current: number;
     total: number;
     filename: string;
+    percent: number;
+    loadedBytes: number;
+    totalBytes: number;
   } | null>(null);
   const [batchResults, setBatchResults] = useState<DropResult[]>([]);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -135,13 +138,27 @@ export const FileDropDeck: React.FC<FileDropDeckProps> = ({ apiClient }) => {
         current: i + 1,
         total: selectedFiles.length,
         filename: file.name,
+        percent: 0,
+        loadedBytes: 0,
+        totalBytes: file.size || 0,
       });
 
       try {
         const dropRes = await apiClient.dropFile(
           file.uri,
           file.name,
-          file.mimeType || 'application/octet-stream'
+          file.mimeType || 'application/octet-stream',
+          (bytesSent, totalBytes) => {
+            const pct = totalBytes > 0 ? Math.min(100, Math.round((bytesSent / totalBytes) * 100)) : 0;
+            setUploadProgress({
+              current: i + 1,
+              total: selectedFiles.length,
+              filename: file.name,
+              percent: pct,
+              loadedBytes: bytesSent,
+              totalBytes,
+            });
+          }
         );
         results.push(dropRes);
       } catch (err: unknown) {
@@ -325,6 +342,41 @@ export const FileDropDeck: React.FC<FileDropDeckProps> = ({ apiClient }) => {
                 </View>
               ))}
             </ScrollView>
+
+            {/* Live Visual Upload Progress Bar */}
+            {uploading && uploadProgress && (
+              <View style={styles.progressContainer}>
+                <View style={styles.progressHeaderRow}>
+                  <Text style={styles.progressFileName} numberOfLines={1} ellipsizeMode="middle">
+                    {uploadProgress.filename}
+                  </Text>
+                  <Text style={styles.progressPercentText}>
+                    {uploadProgress.percent}%
+                  </Text>
+                </View>
+
+                {/* Progress Bar Track & Fill */}
+                <View style={styles.progressBarTrack}>
+                  <View
+                    style={[
+                      styles.progressBarFill,
+                      { width: `${Math.max(1, Math.min(100, uploadProgress.percent))}%` },
+                    ]}
+                  />
+                </View>
+
+                <View style={styles.progressDetailsRow}>
+                  <Text style={styles.progressDetailText}>
+                    Dropping {uploadProgress.current} of {uploadProgress.total}
+                  </Text>
+                  {uploadProgress.totalBytes > 0 && (
+                    <Text style={styles.progressDetailText}>
+                      {formatSize(uploadProgress.loadedBytes)} / {formatSize(uploadProgress.totalBytes)}
+                    </Text>
+                  )}
+                </View>
+              </View>
+            )}
 
             {/* Upload Button with Progress */}
             <TouchableOpacity
@@ -906,5 +958,54 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '600',
     color: Palette.text,
+  },
+  progressContainer: {
+    backgroundColor: Palette.surface1,
+    borderRadius: 10,
+    padding: 12,
+    marginTop: 10,
+    marginBottom: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(205, 214, 244, 0.1)',
+  },
+  progressHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  progressFileName: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: Palette.text,
+    flex: 1,
+    marginRight: 8,
+  },
+  progressPercentText: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: Palette.sapphire,
+  },
+  progressBarTrack: {
+    height: 8,
+    backgroundColor: Palette.surface0,
+    borderRadius: 4,
+    overflow: 'hidden',
+    position: 'relative',
+    marginBottom: 6,
+  },
+  progressBarFill: {
+    height: '100%',
+    backgroundColor: Palette.sapphire,
+    borderRadius: 4,
+  },
+  progressDetailsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  progressDetailText: {
+    fontSize: 10,
+    color: Palette.overlay0,
   },
 });

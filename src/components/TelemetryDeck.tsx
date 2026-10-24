@@ -1,4 +1,4 @@
-import { Laptop, Smartphone, Zap } from 'lucide-react-native';
+import { Laptop, Monitor, Smartphone, Zap } from 'lucide-react-native';
 import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { Palette } from '../constants/theme';
@@ -14,15 +14,22 @@ export const TelemetryDeck: React.FC<TelemetryDeckProps> = ({
   clientBattery,
 }) => {
   const hostBat = hostTelemetry?.battery;
-  const hostPercent =
-    hostBat?.percent !== null && hostBat?.percent !== undefined
-      ? `${hostBat.percent}%`
-      : hostTelemetry?.ac_connected
-      ? 'AC Only'
-      : 'Offline';
+
+  // Check if host is a desktop PC vs a Laptop
+  const isPC =
+    hostTelemetry?.device_type === 'desktop' ||
+    (hostTelemetry !== null && hostBat?.present === false && hostBat?.percent === null);
+
+  const hostPercent = isPC
+    ? 'PC'
+    : hostBat?.percent !== null && hostBat?.percent !== undefined
+    ? `${hostBat.percent}%`
+    : hostTelemetry?.ac_connected
+    ? 'AC Only'
+    : 'Offline';
 
   const isHostCharging =
-    hostBat?.status?.toLowerCase().includes('charging') || hostTelemetry?.ac_connected;
+    !isPC && (hostBat?.status?.toLowerCase().includes('charging') || hostTelemetry?.ac_connected);
 
   const phonePercent =
     clientBattery.batteryLevel !== null
@@ -38,8 +45,14 @@ export const TelemetryDeck: React.FC<TelemetryDeckProps> = ({
         <View style={styles.deviceCol}>
           <View style={styles.headerRow}>
             <View style={styles.labelRow}>
-              <Laptop size={13} color={Palette.overlay1} style={styles.headerIcon} />
-              <Text style={styles.deviceLabel} numberOfLines={1}>Workstation</Text>
+              {isPC ? (
+                <Monitor size={13} color={Palette.overlay1} style={styles.headerIcon} />
+              ) : (
+                <Laptop size={13} color={Palette.overlay1} style={styles.headerIcon} />
+              )}
+              <Text style={styles.deviceLabel} numberOfLines={1}>
+                {isPC ? 'Desktop PC' : 'Laptop'}
+              </Text>
             </View>
             {isHostCharging && (
               <Zap size={12} color={Palette.green} />
@@ -47,7 +60,9 @@ export const TelemetryDeck: React.FC<TelemetryDeckProps> = ({
           </View>
           <Text style={styles.percentText} numberOfLines={1}>{hostPercent}</Text>
           <Text style={styles.detailText} numberOfLines={1} ellipsizeMode="tail">
-            {hostBat?.power_supply_name || (hostTelemetry?.ac_connected ? 'Mains Power' : 'Linux Host')}
+            {isPC
+              ? hostTelemetry?.ac_connected ? 'Mains Power' : 'Linux PC'
+              : hostBat?.power_supply_name || (hostTelemetry?.ac_connected ? 'Mains Power' : 'Battery')}
           </Text>
         </View>
 

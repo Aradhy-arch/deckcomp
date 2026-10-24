@@ -280,7 +280,8 @@ export class ApiClient {
   async dropFile(
     uri: string,
     filename: string,
-    mimeType: string = 'application/octet-stream'
+    mimeType: string = 'application/octet-stream',
+    onProgress?: (bytesSent: number, totalBytes: number) => void
   ): Promise<DropResult> {
     const authQuery = this.authToken ? `?token=${encodeURIComponent(this.authToken)}` : '';
     const uploadUrl = `${this.baseUrl}/drop${authQuery}`;
@@ -294,6 +295,14 @@ export class ApiClient {
           xhr.setRequestHeader('Authorization', `Bearer ${this.authToken}`);
         }
         xhr.setRequestHeader('Accept', 'application/json');
+
+        if (xhr.upload && onProgress) {
+          xhr.upload.onprogress = (evt) => {
+            if (evt.lengthComputable && evt.total > 0) {
+              onProgress(evt.loaded, evt.total);
+            }
+          };
+        }
 
         xhr.onload = () => {
           if (xhr.status >= 200 && xhr.status < 300) {

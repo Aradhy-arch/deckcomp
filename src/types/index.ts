@@ -39,6 +39,7 @@ export interface HostBattery {
 }
 
 export interface HostTelemetry {
+  device_type?: 'laptop' | 'desktop';
   battery: HostBattery;
   ac_connected: boolean;
   uptime_seconds: number;
