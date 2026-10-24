@@ -19,6 +19,7 @@ import {
 import React, { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
+  BackHandler,
   Image,
   Modal,
   ScrollView,
@@ -38,6 +39,7 @@ import {
   setUserDistro,
 } from '../storage/deviceStorage';
 import { DeviceConfig, DiscoveredHost } from '../types';
+import { ConfirmModal } from './ConfirmModal';
 
 const DISTRO_PRESETS = [
   'Arch Linux',
@@ -63,6 +65,10 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({ visible, onCom
   const [distro, setDistro] = useState('Arch Linux');
   const [customDistroInput, setCustomDistroInput] = useState('');
   const [showEasterEgg, setShowEasterEgg] = useState(false);
+  const [repentStep, setRepentStep] = useState<'roast' | 'pledge'>('roast');
+  const [pledgeText, setPledgeText] = useState('');
+  const [pledgeError, setPledgeError] = useState<string | null>(null);
+  const [showExitConfirm, setShowExitConfirm] = useState(false);
 
   const [ip, setIp] = useState('');
   const [port, setPort] = useState('8088');
@@ -88,10 +94,48 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({ visible, onCom
     }
   }, [visible]);
 
+  const handleOpenEasterEgg = () => {
+    setRepentStep('roast');
+    setPledgeText('');
+    setPledgeError(null);
+    setShowExitConfirm(false);
+    setShowEasterEgg(true);
+  };
+
+  const handleDismissEasterEgg = () => {
+    if (repentStep === 'pledge') {
+      setShowExitConfirm(true);
+    } else {
+      setCustomDistroInput('');
+      setShowEasterEgg(false);
+      setRepentStep('roast');
+    }
+  };
+
+  const handleVerifyPledge = () => {
+    const normalized = pledgeText.trim().replace(/[’‘`]/g, "'");
+    const target = "I'll Install Linux 🐧";
+    const targetAlt = "I'll Install Linux";
+
+    if (
+      normalized.toLowerCase() === target.toLowerCase() ||
+      normalized.toLowerCase() === targetAlt.toLowerCase()
+    ) {
+      setCustomDistroInput('');
+      setDistro('Arch Linux');
+      setShowEasterEgg(false);
+      setRepentStep('roast');
+      setPledgeText('');
+      setPledgeError(null);
+    } else {
+      setPledgeError('Incorrect pledge! Type: "I\'ll Install Linux 🐧"');
+    }
+  };
+
   const handleDistroInputChange = (val: string) => {
     setCustomDistroInput(val);
     if (/windows/i.test(val)) {
-      setShowEasterEgg(true);
+      handleOpenEasterEgg();
     } else if (val.trim()) {
       setDistro(val.trim());
     }
@@ -99,7 +143,7 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({ visible, onCom
 
   const handleSelectChip = (d: string) => {
     if (/windows/i.test(d)) {
-      setShowEasterEgg(true);
+      handleOpenEasterEgg();
       return;
     }
     setDistro(d);
@@ -109,7 +153,7 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({ visible, onCom
   const handleProceedToPairing = async () => {
     const chosen = (customDistroInput.trim() || distro || 'Linux').trim();
     if (/windows/i.test(chosen)) {
-      setShowEasterEgg(true);
+      handleOpenEasterEgg();
       return;
     }
     await setUserDistro(chosen);
@@ -595,62 +639,148 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({ visible, onCom
           visible={showEasterEgg}
           transparent={true}
           animationType="fade"
-          onRequestClose={() => setShowEasterEgg(false)}
+          onRequestClose={handleDismissEasterEgg}
         >
           <View style={styles.easterEggBackdrop}>
             <TouchableOpacity
               style={StyleSheet.absoluteFill}
               activeOpacity={1}
-              onPress={() => setShowEasterEgg(false)}
+              onPress={handleDismissEasterEgg}
             />
             <View style={styles.easterEggCard}>
-              <View style={styles.hazardIconOuter}>
-                <View style={styles.hazardIconInner}>
-                  <AlertTriangle size={38} color={Palette.peach} />
-                </View>
-              </View>
+              {repentStep === 'roast' ? (
+                <>
+                  <View style={styles.hazardIconOuter}>
+                    <View style={styles.hazardIconInner}>
+                      <AlertTriangle size={38} color={Palette.peach} />
+                    </View>
+                  </View>
 
-              <Text style={styles.easterEggTitle}>DeckComp - Setup Aborted</Text>
+                  <Text style={styles.easterEggTitle}>DeckComp - Setup Aborted</Text>
 
-              <View style={styles.roastBadge}>
-                <Text style={styles.roastBadgeText}>🚫 MICROSLOP &amp; WINDOWS DETECTED 🚫</Text>
-              </View>
+                  <View style={styles.roastBadge}>
+                    <Text style={styles.roastBadgeText}>🚫 MICROSLOP &amp; WINDOWS DETECTED 🚫</Text>
+                  </View>
 
-              <Text style={styles.easterEggBody}>
-                <Text style={styles.boldKindly}>Kindly</Text> uninstall this app an go on with your miserable life,as we don't want to touch your dirty system and uninstall it Ourselves...
-              </Text>
+                  <Text style={styles.easterEggBody}>
+                    <Text style={styles.boldKindly}>Kindly</Text> uninstall this app an go on with your miserable life,as we don't want to touch your dirty system and uninstall it Ourselves...
+                  </Text>
 
-              <Text style={styles.easterEggRoastSub}>
-                DeckComp is handcrafted exclusively for clean, zero-bloat Linux workstations on Wayland. We refuse to connect to proprietary telemetry, forced restarts, and Edge spyware.
-              </Text>
+                  <Text style={styles.easterEggRoastSub}>
+                    DeckComp is handcrafted exclusively for clean, zero-bloat Linux workstations on Wayland. We refuse to connect to proprietary telemetry, forced restarts, and Edge spyware.
+                  </Text>
 
-              <View style={styles.easterEggBtnCol}>
-                <TouchableOpacity
-                  style={styles.repentBtn}
-                  onPress={() => {
-                    setCustomDistroInput('');
-                    setDistro('Arch Linux');
-                    setShowEasterEgg(false);
-                  }}
-                  activeOpacity={0.8}
-                >
-                  <Text style={styles.repentBtnText}>I Repent (I'll Install Linux 🐧)</Text>
-                </TouchableOpacity>
+                  <View style={styles.easterEggBtnCol}>
+                    <TouchableOpacity
+                      style={styles.repentBtn}
+                      onPress={() => {
+                        setRepentStep('pledge');
+                        setPledgeText('');
+                        setPledgeError(null);
+                      }}
+                      activeOpacity={0.8}
+                    >
+                      <Text style={styles.repentBtnText}>I Repent (I'll Install Linux 🐧)</Text>
+                    </TouchableOpacity>
 
-                <TouchableOpacity
-                  style={styles.dismissEasterBtn}
-                  onPress={() => {
-                    setCustomDistroInput('');
-                    setShowEasterEgg(false);
-                  }}
-                  activeOpacity={0.7}
-                >
-                  <Text style={styles.dismissEasterText}>Clear &amp; Try Again</Text>
-                </TouchableOpacity>
-              </View>
+                    <TouchableOpacity
+                      style={styles.dismissEasterBtn}
+                      onPress={() => {
+                        setCustomDistroInput('');
+                        setShowEasterEgg(false);
+                      }}
+                      activeOpacity={0.7}
+                    >
+                      <Text style={styles.dismissEasterText}>Clear &amp; Try Again</Text>
+                    </TouchableOpacity>
+                  </View>
+                </>
+              ) : (
+                <>
+                  <View style={styles.hazardIconOuter}>
+                    <View style={styles.hazardIconInner}>
+                      <Sparkles size={34} color={Palette.mauve} />
+                    </View>
+                  </View>
+
+                  <Text style={styles.easterEggTitle}>Solemn Linux Pledge</Text>
+
+                  <View style={[styles.roastBadge, styles.pledgeBadge]}>
+                    <Text style={styles.pledgeBadgeText}>🐧 PLEDGE REQUIRED FOR PARDON 🐧</Text>
+                  </View>
+
+                  <Text style={styles.easterEggBody}>
+                    Prove your repentance by typing the sacred oath word-for-word:
+                  </Text>
+
+                  <View style={styles.targetPledgeBox}>
+                    <Text style={styles.targetPledgeText}>"I'll Install Linux 🐧"</Text>
+                  </View>
+
+                  <View style={styles.pledgeInputRow}>
+                    <TextInput
+                      style={styles.pledgeInput}
+                      value={pledgeText}
+                      onChangeText={(val) => {
+                        setPledgeText(val);
+                        setPledgeError(null);
+                      }}
+                      placeholder="Type the oath here..."
+                      placeholderTextColor={Palette.overlay0}
+                      autoCapitalize="sentences"
+                      autoCorrect={false}
+                    />
+                    <TouchableOpacity
+                      style={styles.penguinChip}
+                      onPress={() => setPledgeText((prev) => prev + '🐧')}
+                      activeOpacity={0.7}
+                    >
+                      <Text style={styles.penguinChipText}>+ 🐧</Text>
+                    </TouchableOpacity>
+                  </View>
+
+                  {pledgeError && (
+                    <Text style={styles.pledgeErrorText}>{pledgeError}</Text>
+                  )}
+
+                  <View style={styles.easterEggBtnCol}>
+                    <TouchableOpacity
+                      style={styles.repentBtn}
+                      onPress={handleVerifyPledge}
+                      activeOpacity={0.8}
+                    >
+                      <Text style={styles.repentBtnText}>Pledge Allegiance to Tux</Text>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
+                      style={styles.dismissEasterBtn}
+                      onPress={() => setShowExitConfirm(true)}
+                      activeOpacity={0.7}
+                    >
+                      <Text style={styles.dismissEasterText}>I Refuse (Alt+F4)</Text>
+                    </TouchableOpacity>
+                  </View>
+                </>
+              )}
             </View>
           </View>
         </Modal>
+
+        {/* Exit Confirmation Modal ("Are you sure?") */}
+        <ConfirmModal
+          visible={showExitConfirm}
+          title="Are you sure?"
+          message="Refusing to install Linux will terminate DeckComp immediately. Do you really want to exit?"
+          confirmText="Yes, Exit"
+          cancelText="No, Take Me Back"
+          isDestructive={true}
+          icon="power"
+          onConfirm={() => {
+            setShowExitConfirm(false);
+            BackHandler.exitApp();
+          }}
+          onCancel={() => setShowExitConfirm(false)}
+        />
       </View>
     </Modal>
   );
@@ -1091,5 +1221,72 @@ const styles = StyleSheet.create({
     color: Palette.subtext1,
     fontSize: 13,
     fontWeight: '600',
+  },
+  pledgeBadge: {
+    backgroundColor: 'rgba(203, 166, 247, 0.12)',
+    borderColor: 'rgba(203, 166, 247, 0.25)',
+  },
+  pledgeBadgeText: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: Palette.mauve,
+    letterSpacing: 0.5,
+  },
+  targetPledgeBox: {
+    backgroundColor: Palette.mantle,
+    borderRadius: 8,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    borderWidth: 1,
+    borderColor: Palette.surface1,
+    marginBottom: 12,
+    alignSelf: 'stretch',
+    alignItems: 'center',
+  },
+  targetPledgeText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: Palette.peach,
+    fontFamily: 'monospace',
+  },
+  pledgeInputRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    alignSelf: 'stretch',
+    marginBottom: 8,
+  },
+  pledgeInput: {
+    flex: 1,
+    backgroundColor: Palette.surface1,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: Palette.surface2,
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+    fontSize: 13,
+    color: Palette.text,
+  },
+  penguinChip: {
+    backgroundColor: Palette.surface1,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: Palette.surface2,
+    paddingHorizontal: 10,
+    paddingVertical: 9,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  penguinChipText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: Palette.text,
+  },
+  pledgeErrorText: {
+    fontSize: 12,
+    color: Palette.red,
+    fontWeight: '600',
+    marginBottom: 10,
+    textAlign: 'center',
   },
 });
