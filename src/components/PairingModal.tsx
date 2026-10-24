@@ -7,7 +7,7 @@ import {
   ShieldCheck,
   X,
 } from 'lucide-react-native';
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Modal,
@@ -48,6 +48,8 @@ export const PairingModal: React.FC<PairingModalProps> = ({
   const [deviceUuid, setDeviceUuid] = useState('phone');
   const [hostname, setHostname] = useState<string | null>(null);
 
+  const abortControllerRef = useRef<AbortController | null>(null);
+
   useEffect(() => {
     if (visible) {
       setStep('discover');
@@ -55,42 +57,65 @@ export const PairingModal: React.FC<PairingModalProps> = ({
       setErrorMsg(null);
       getLocalDeviceUuid().then(setDeviceUuid);
       runScan();
+    } else {
+      abortControllerRef.current?.abort();
+      abortControllerRef.current = null;
     }
+    return () => {
+      abortControllerRef.current?.abort();
+      abortControllerRef.current = null;
+    };
   }, [visible]);
 
   const runScan = async () => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+
     setScanning(true);
     setErrorMsg(null);
     try {
-      const hosts: DiscoveredHost[] = [];
       const activePort = parseInt(port, 10) || 8088;
+
+      const handleFoundHost = (host: DiscoveredHost) => {
+        setDiscoveredHosts((prev) => {
+          if (prev.some((h) => h.ip === host.ip)) return prev;
+          return [...prev, host];
+        });
+        setIp((prevIp) => (prevIp ? prevIp : host.ip));
+      };
+
+      // 1. Immediate scan of current input IP if present
       if (ip && ip.trim()) {
-        const direct = await ApiClient.scanHost(ip.trim(), activePort);
-        if (direct) {
-          hosts.push(direct);
-        }
+        ApiClient.scanHost(ip.trim(), activePort, 300, controller.signal).then((direct) => {
+          if (direct) handleFoundHost(direct);
+        });
       }
 
-      // Discover local subnet
+      // 2. Discover local subnet with streaming callback
       const subnetBase = ip && ip.includes('.') ? ip.trim().split('.').slice(0, 3).join('.') : undefined;
-      const found = await ApiClient.discoverSubnet(subnetBase, activePort);
-      for (const h of found) {
-        if (!hosts.some((existing) => existing.ip === h.ip)) {
-          hosts.push(h);
-        }
-      }
-      setDiscoveredHosts(hosts);
-      if (hosts.length > 0 && !ip) {
-        setIp(hosts[0].ip);
-      }
+      await ApiClient.discoverSubnet({
+        baseSubnetPrefix: subnetBase,
+        port: activePort,
+        signal: controller.signal,
+        onHostFound: handleFoundHost,
+      });
     } catch {
       // Fallback to manual IP
     } finally {
-      setScanning(false);
+      if (abortControllerRef.current === controller) {
+        setScanning(false);
+      }
     }
   };
 
   const handleInitiatePairing = async (targetIp?: string) => {
+    // Abort active background scanner immediately
+    abortControllerRef.current?.abort();
+    setScanning(false);
+
     const activeIp = (targetIp || ip).trim();
     const activePort = parseInt(port, 10) || 8088;
     if (!activeIp) {
@@ -274,7 +299,7 @@ export const PairingModal: React.FC<PairingModalProps> = ({
               <TouchableOpacity
                 style={styles.primaryBtn}
                 onPress={() => handleInitiatePairing()}
-                disabled={initiating || scanning}
+                disabled={initiating}
                 activeOpacity={0.7}
               >
                 {initiating ? (

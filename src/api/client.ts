@@ -3,6 +3,7 @@ import {
   AmbientOptions,
   ClipboardData,
   DiscoveredHost,
+  DiscoverSubnetOptions,
   DropResult,
   HostConfig,
   HostTelemetry,
@@ -460,12 +461,28 @@ export class ApiClient {
   static async scanHost(
     ip: string,
     port: number = 8088,
-    timeoutMs: number = 450
+    timeoutMs: number = 300,
+    signal?: AbortSignal
   ): Promise<DiscoveredHost | null> {
     if (!ip || !ip.trim()) return null;
+    if (signal?.aborted) return null;
     const cleanIp = ip.trim();
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
+
+    const onParentAbort = () => {
+      clearTimeout(timer);
+      controller.abort();
+    };
+
+    if (signal) {
+      if (signal.aborted) {
+        clearTimeout(timer);
+        return null;
+      }
+      signal.addEventListener('abort', onParentAbort, { once: true });
+    }
+
     try {
       const res = await fetch(`http://${cleanIp}:${port}/api/v1/health`, {
         signal: controller.signal,
@@ -473,7 +490,7 @@ export class ApiClient {
       clearTimeout(timer);
       if (res.ok) {
         const data = await res.json();
-        if (data.status === 'ok') {
+        if (data && data.status === 'ok') {
           return {
             ip: cleanIp,
             port,
@@ -484,62 +501,139 @@ export class ApiClient {
       }
     } catch {
       clearTimeout(timer);
+    } finally {
+      if (signal) {
+        signal.removeEventListener('abort', onParentAbort);
+      }
     }
     return null;
   }
 
+  // Progressive streaming discovery across common local subnets
   static async discoverSubnet(
-    baseSubnetPrefix?: string,
-    port: number = 8088
+    optionsOrPrefix?: string | DiscoverSubnetOptions,
+    portArg: number = 8088,
+    onHostFoundArg?: (host: DiscoveredHost) => void
   ): Promise<DiscoveredHost[]> {
-    const prefixes = baseSubnetPrefix && baseSubnetPrefix.trim()
-      ? [baseSubnetPrefix.trim()]
-      : ['192.168.1', '192.168.0', '192.168.31', '192.168.29', '192.168.43', '10.0.0'];
+    let baseSubnetPrefix: string | undefined;
+    let port = portArg;
+    let timeoutMs = 300;
+    let signal: AbortSignal | undefined;
+    let onHostFound: ((host: DiscoveredHost) => void) | undefined = onHostFoundArg;
+
+    if (typeof optionsOrPrefix === 'object' && optionsOrPrefix !== null) {
+      baseSubnetPrefix = optionsOrPrefix.baseSubnetPrefix;
+      port = optionsOrPrefix.port ?? 8088;
+      timeoutMs = optionsOrPrefix.timeoutMs ?? 300;
+      signal = optionsOrPrefix.signal;
+      onHostFound = optionsOrPrefix.onHostFound ?? onHostFoundArg;
+    } else if (typeof optionsOrPrefix === 'string') {
+      baseSubnetPrefix = optionsOrPrefix;
+    }
+
+    if (signal?.aborted) return [];
+
+    const defaultPrefixes = ['192.168.1', '192.168.0', '192.168.31', '192.168.29', '192.168.43', '10.0.0'];
+    let prefixes: string[] = [];
+    if (baseSubnetPrefix && baseSubnetPrefix.trim()) {
+      const clean = baseSubnetPrefix.trim();
+      prefixes = [clean, ...defaultPrefixes.filter((p) => p !== clean)];
+    } else {
+      prefixes = defaultPrefixes;
+    }
 
     const results: DiscoveredHost[] = [];
+    let lockedPrefix: string | null = null;
 
-    const scanBatch = async (ips: string[], timeout: number) => {
-      const batchRes = await Promise.all(ips.map((candidate) => ApiClient.scanHost(candidate, port, timeout)));
-      for (const host of batchRes) {
-        if (host && !results.some((r) => r.ip === host.ip)) {
-          results.push(host);
+    const recordFound = (host: DiscoveredHost) => {
+      if (!results.some((r) => r.ip === host.ip)) {
+        results.push(host);
+        // Subnet affinity lock: lock onto the subnet of the first found host
+        const parts = host.ip.split('.');
+        if (parts.length === 4) {
+          lockedPrefix = parts.slice(0, 3).join('.');
         }
+        try {
+          onHostFound?.(host);
+        } catch {}
       }
     };
 
-    // Phase 1: High-probability DHCP addresses (.2-.40 and .100-.140) across prefixes
-    const prioritySuffixes: number[] = [];
-    for (let i = 2; i <= 40; i++) prioritySuffixes.push(i);
-    for (let i = 100; i <= 140; i++) prioritySuffixes.push(i);
-
-    for (const prefix of prefixes) {
-      const candidates = prioritySuffixes.map((s) => `${prefix}.${s}`);
-      const batchSize = 40;
-      for (let i = 0; i < candidates.length; i += batchSize) {
-        await scanBatch(candidates.slice(i, i + batchSize), 400);
-        if (results.length > 0 && !baseSubnetPrefix) {
-          return results;
+    // Helper: probe a batch of candidate IPs concurrently with progressive reporting
+    const probeBatch = async (ips: string[]): Promise<void> => {
+      if (signal?.aborted) return;
+      const tasks = ips.map(async (ip) => {
+        if (signal?.aborted) return;
+        // If locked to a subnet, skip candidates outside that subnet
+        if (lockedPrefix) {
+          const parts = ip.split('.');
+          if (parts.length === 4 && parts.slice(0, 3).join('.') !== lockedPrefix) {
+            return;
+          }
         }
+        const host = await ApiClient.scanHost(ip, port, timeoutMs, signal);
+        if (host) {
+          recordFound(host);
+        }
+      });
+      await Promise.all(tasks);
+    };
+
+    // Phase 1: High-probability DHCP addresses interleaved across prefixes
+    // Priority suffixes: .2-.15, .20, .25, .30, .100-.105, .110, .115, .150, .200
+    const prioritySuffixes: number[] = [
+      2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15,
+      20, 25, 30,
+      100, 101, 102, 103, 104, 105, 110, 115,
+      150, 200,
+    ];
+
+    // Interleave prefixes so all candidate subnets get priority probes simultaneously
+    const phase1Candidates: string[] = [];
+    for (const suffix of prioritySuffixes) {
+      for (const prefix of prefixes) {
+        phase1Candidates.push(`${prefix}.${suffix}`);
       }
     }
 
-    if (results.length > 0) {
+    const BATCH_SIZE = 36;
+    for (let i = 0; i < phase1Candidates.length; i += BATCH_SIZE) {
+      if (signal?.aborted) return results;
+      const batch = phase1Candidates.slice(i, i + BATCH_SIZE);
+      await probeBatch(batch);
+      // If we found a host and affinity is locked, we can stop Phase 1 early
+      if (results.length > 0 && lockedPrefix) {
+        return results;
+      }
+    }
+
+    if (results.length > 0 || signal?.aborted) {
       return results;
     }
 
-    // Phase 2: Full sweep across remaining addresses if Phase 1 found nothing
+    // Phase 2: Sweep remaining suffixes if Phase 1 found nothing
     const remainingSuffixes: number[] = [];
-    for (let i = 41; i <= 99; i++) remainingSuffixes.push(i);
-    for (let i = 141; i <= 254; i++) remainingSuffixes.push(i);
+    for (let i = 1; i <= 254; i++) {
+      if (!prioritySuffixes.includes(i)) {
+        remainingSuffixes.push(i);
+      }
+    }
 
-    for (const prefix of prefixes) {
-      const candidates = remainingSuffixes.map((s) => `${prefix}.${s}`);
-      const batchSize = 50;
-      for (let i = 0; i < candidates.length; i += batchSize) {
-        await scanBatch(candidates.slice(i, i + batchSize), 450);
-        if (results.length > 0 && !baseSubnetPrefix) {
-          return results;
-        }
+    // If baseSubnetPrefix was specified, only sweep that prefix in Phase 2
+    const phase2Prefixes = baseSubnetPrefix ? [baseSubnetPrefix.trim()] : prefixes;
+    const phase2Candidates: string[] = [];
+    for (const suffix of remainingSuffixes) {
+      for (const prefix of phase2Prefixes) {
+        phase2Candidates.push(`${prefix}.${suffix}`);
+      }
+    }
+
+    for (let i = 0; i < phase2Candidates.length; i += 40) {
+      if (signal?.aborted) return results;
+      const batch = phase2Candidates.slice(i, i + 40);
+      await probeBatch(batch);
+      if (results.length > 0 && lockedPrefix) {
+        return results;
       }
     }
 

@@ -16,7 +16,7 @@ import {
   Terminal,
   Zap,
 } from 'lucide-react-native';
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   BackHandler,
@@ -80,6 +80,7 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({ visible, onCom
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [deviceUuid, setDeviceUuid] = useState('phone');
   const [pairedDevice, setPairedDevice] = useState<DeviceConfig | null>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
     if (visible) {
@@ -91,7 +92,14 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({ visible, onCom
         if (saved) setDistro(saved);
       });
       getLocalDeviceUuid().then(setDeviceUuid);
+    } else {
+      abortControllerRef.current?.abort();
+      abortControllerRef.current = null;
     }
+    return () => {
+      abortControllerRef.current?.abort();
+      abortControllerRef.current = null;
+    };
   }, [visible]);
 
   const handleOpenEasterEgg = () => {
@@ -167,34 +175,52 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({ visible, onCom
   };
 
   const scanLocalNetwork = async () => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+
     setScanning(true);
     setErrorMsg(null);
     try {
-      const hosts: DiscoveredHost[] = [];
+      const activePort = parseInt(port, 10) || 8088;
+
+      const handleFoundHost = (host: DiscoveredHost) => {
+        setDiscoveredHosts((prev) => {
+          if (prev.some((h) => h.ip === host.ip)) return prev;
+          return [...prev, host];
+        });
+        setIp((prevIp) => (prevIp ? prevIp : host.ip));
+      };
+
       if (ip && ip.trim()) {
-        const direct = await ApiClient.scanHost(ip.trim(), 8088);
-        if (direct) hosts.push(direct);
+        ApiClient.scanHost(ip.trim(), activePort, 300, controller.signal).then((direct) => {
+          if (direct) handleFoundHost(direct);
+        });
       }
 
       const subnetBase = ip && ip.includes('.') ? ip.trim().split('.').slice(0, 3).join('.') : undefined;
-      const found = await ApiClient.discoverSubnet(subnetBase, 8088);
-      for (const h of found) {
-        if (!hosts.some((existing) => existing.ip === h.ip)) {
-          hosts.push(h);
-        }
-      }
-      setDiscoveredHosts(hosts);
-      if (hosts.length > 0 && !ip) {
-        setIp(hosts[0].ip);
-      }
+      await ApiClient.discoverSubnet({
+        baseSubnetPrefix: subnetBase,
+        port: activePort,
+        signal: controller.signal,
+        onHostFound: handleFoundHost,
+      });
     } catch {
       // Fallback
     } finally {
-      setScanning(false);
+      if (abortControllerRef.current === controller) {
+        setScanning(false);
+      }
     }
   };
 
   const requestPairingCode = async (targetIp?: string) => {
+    // Abort active background scanner immediately
+    abortControllerRef.current?.abort();
+    setScanning(false);
+
     const activeIp = (targetIp || ip).trim();
     const activePort = parseInt(port, 10) || 8088;
     if (!activeIp) {
@@ -519,7 +545,7 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({ visible, onCom
             <TouchableOpacity
               style={styles.actionBtn}
               onPress={() => requestPairingCode()}
-              disabled={initiating || scanning}
+              disabled={initiating}
               activeOpacity={0.7}
             >
               {initiating ? (

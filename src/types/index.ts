@@ -135,3 +135,11 @@ export interface DiscoveredHost {
   hostname: string;
   version: string;
 }
+
+export interface DiscoverSubnetOptions {
+  baseSubnetPrefix?: string;
+  port?: number;
+  timeoutMs?: number;
+  signal?: AbortSignal;
+  onHostFound?: (host: DiscoveredHost) => void;
+}
