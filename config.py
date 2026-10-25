@@ -13,7 +13,7 @@ API_PREFIX = "/api/v1"
 
 # Storage limits and paths
 DOWNLOADS_DIR = Path(os.environ.get("DECK_DOWNLOADS_DIR", Path.home() / "Downloads")).resolve()
-MAX_UPLOAD_BYTES = 500 * 1024 * 1024  # 500 MB limit
+MAX_UPLOAD_BYTES = 10 * 1024 * 1024 * 1024  # 10 GB limit for Warpinator-grade file transfer
 
 # Subprocess timeouts (seconds)
 FAST_CMD_TIMEOUT = 3.0

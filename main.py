@@ -44,7 +44,7 @@ class UploadLimitMiddleware:
     def __init__(self, app: ASGIApp, max_bytes: int = MAX_UPLOAD_BYTES):
         self.app = app
         self.max_bytes = max_bytes
-        self.max_wire_bytes = max_bytes + 65536  # allowance for multipart headers
+        self.max_wire_bytes = max_bytes + 1048576  # 1MB allowance for multipart headers
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
         if scope["type"] == "http" and scope.get("path", "").endswith("/drop") and scope.get("method") == "POST":
