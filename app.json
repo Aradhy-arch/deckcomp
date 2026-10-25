@@ -51,7 +51,11 @@
       }
     },
     "updates": {
-      "url": "https://u.expo.dev/2f7f2c59-c6df-4597-935a-2c828995327f"
+      "url": "https://u.expo.dev/2f7f2c59-c6df-4597-935a-2c828995327f",
+      "fallbackToCacheTimeout": 3000,
+      "requestHeaders": {
+        "expo-channel-name": "preview"
+      }
     }
   }
 }

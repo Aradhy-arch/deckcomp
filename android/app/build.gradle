@@ -1,7 +1,5 @@
 apply plugin: "com.android.application"
-if (project.extensions.findByName('kotlin') == null) {
-    apply plugin: "org.jetbrains.kotlin.android"
-}
+apply plugin: "org.jetbrains.kotlin.android"
 apply plugin: "com.facebook.react"
 
 def projectRoot = rootDir.getAbsoluteFile().getParentFile().getAbsolutePath()
