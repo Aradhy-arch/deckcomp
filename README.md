@@ -25,14 +25,14 @@ A zero-bloat, lightweight Linux host daemon and CLI bridge built for the **DeckC
 Run the install script to verify dependencies, configure the isolated environment, install CLI tools, set up file manager actions, and start the systemd service:
 
 ```bash
-curl -fsSL [https://raw.githubusercontent.com/deckcomp/deckcomp/main/install.sh](https://raw.githubusercontent.com/deckcomp/deckcomp/main/install.sh) | bash
+curl -fsSL https://raw.githubusercontent.com/deckcomp/deckcomp/main/install.sh | bash
 ```
 
 <details>
 <summary>🛠️ Manual / Git Installation</summary>
 
 ```bash
-git clone [https://github.com/deckcomp/deckcomp.git](https://github.com/deckcomp/deckcomp.git)
+git clone --depth=1 https://github.com/deckcomp/deckcomp.git
 cd deckcomp
 ./install.sh
 ```
