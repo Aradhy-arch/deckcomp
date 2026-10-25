@@ -9,7 +9,10 @@
     "backgroundColor": "#1e1e2e",
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.aradhy.deckcomp"
+      "bundleIdentifier": "com.aradhy.deckcomp",
+      "runtimeVersion": {
+        "policy": "appVersion"
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -24,7 +27,8 @@
         "READ_EXTERNAL_STORAGE",
         "VIBRATE",
         "POST_NOTIFICATIONS"
-      ]
+      ],
+      "runtimeVersion": "1.0.0"
     },
     "web": {
       "favicon": "./assets/favicon.png"
@@ -45,6 +49,9 @@
       "eas": {
         "projectId": "2f7f2c59-c6df-4597-935a-2c828995327f"
       }
+    },
+    "updates": {
+      "url": "https://u.expo.dev/2f7f2c59-c6df-4597-935a-2c828995327f"
     }
   }
 }
