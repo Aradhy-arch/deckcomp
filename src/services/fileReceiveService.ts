@@ -163,8 +163,8 @@ export async function downloadAndSaveSharedFile(
         mimeType
       );
 
-      // Stream file in 2MB chunks to avoid Hermes OutOfMemory on large files (200MB+)
-      const CHUNK_SIZE = 2 * 1024 * 1024;
+      // Stream file in 4MB chunks to avoid Hermes OutOfMemory while minimizing SAF I/O overhead
+      const CHUNK_SIZE = 4 * 1024 * 1024;
       let position = 0;
 
       while (position < fileSize) {

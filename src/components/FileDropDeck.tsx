@@ -161,14 +161,18 @@ export const FileDropDeck: React.FC<FileDropDeckProps> = ({ apiClient }) => {
           (bytesSent, totalBytes) => {
             const expectedTotal = totalBytes > 0 ? totalBytes : file.size || 0;
             const safeSent = Math.min(bytesSent, expectedTotal > 0 ? expectedTotal : bytesSent);
-            const pct = expectedTotal > 0 ? Math.min(100, Math.round((safeSent / expectedTotal) * 100)) : 0;
-            setUploadProgress({
-              current: i + 1,
-              total: selectedFiles.length,
-              filename: file.name,
-              percent: pct,
-              loadedBytes: safeSent,
-              totalBytes: expectedTotal,
+            const rawPct = expectedTotal > 0 ? Math.min(100, Math.round((safeSent / expectedTotal) * 100)) : 0;
+            setUploadProgress((prev) => {
+              const bestPct = prev && prev.filename === file.name ? Math.max(prev.percent, rawPct) : rawPct;
+              const bestLoaded = prev && prev.filename === file.name ? Math.max(prev.loadedBytes, safeSent) : safeSent;
+              return {
+                current: i + 1,
+                total: selectedFiles.length,
+                filename: file.name,
+                percent: Math.min(100, bestPct),
+                loadedBytes: Math.min(expectedTotal > 0 ? expectedTotal : bestLoaded, bestLoaded),
+                totalBytes: expectedTotal,
+              };
             });
           }
         );
@@ -212,15 +216,32 @@ export const FileDropDeck: React.FC<FileDropDeckProps> = ({ apiClient }) => {
       const res = await downloadAndSaveSharedFile(apiClient, item, (bytes, total, phase) => {
         const expectedTotal = total > 0 ? total : item.size_bytes || 0;
         const safeBytes = Math.min(bytes, expectedTotal > 0 ? expectedTotal : bytes);
-        const pct = expectedTotal > 0 ? Math.min(100, Math.round((safeBytes / expectedTotal) * 100)) : 0;
-        setDownloadProgress({
-          current: 1,
-          total: 1,
-          filename: item.filename,
-          percent: pct,
-          loadedBytes: safeBytes,
-          totalBytes: expectedTotal,
-          phase,
+        const fraction = expectedTotal > 0 ? safeBytes / expectedTotal : 0;
+
+        // Single unified 0-100% progress scale:
+        // Phase 1 (Receiving via Wi-Fi): 0% -> 85%
+        // Phase 2 (Writing to phone storage): 85% -> 100%
+        let pct: number;
+        let displayedLoaded: number;
+        if (phase === 'saving') {
+          pct = Math.min(100, Math.round(85 + fraction * 15));
+          displayedLoaded = expectedTotal;
+        } else {
+          pct = Math.min(85, Math.round(fraction * 85));
+          displayedLoaded = safeBytes;
+        }
+
+        setDownloadProgress((prev) => {
+          const bestPct = prev && prev.filename === item.filename ? Math.max(prev.percent, pct) : pct;
+          return {
+            current: 1,
+            total: 1,
+            filename: item.filename,
+            percent: Math.min(100, bestPct),
+            loadedBytes: displayedLoaded,
+            totalBytes: expectedTotal,
+            phase,
+          };
         });
       });
       notifyFileDownloadCompleted(item.filename, res.savedPath).catch(() => {});
@@ -266,15 +287,29 @@ export const FileDropDeck: React.FC<FileDropDeckProps> = ({ apiClient }) => {
         const res = await downloadAndSaveSharedFile(apiClient, item, (bytes, itemTotal, phase) => {
           const expectedTotal = itemTotal > 0 ? itemTotal : item.size_bytes || 0;
           const safeBytes = Math.min(bytes, expectedTotal > 0 ? expectedTotal : bytes);
-          const pct = expectedTotal > 0 ? Math.min(100, Math.round((safeBytes / expectedTotal) * 100)) : 0;
-          setDownloadProgress({
-            current: i + 1,
-            total,
-            filename: item.filename,
-            percent: pct,
-            loadedBytes: safeBytes,
-            totalBytes: expectedTotal,
-            phase,
+          const fraction = expectedTotal > 0 ? safeBytes / expectedTotal : 0;
+
+          let pct: number;
+          let displayedLoaded: number;
+          if (phase === 'saving') {
+            pct = Math.min(100, Math.round(85 + fraction * 15));
+            displayedLoaded = expectedTotal;
+          } else {
+            pct = Math.min(85, Math.round(fraction * 85));
+            displayedLoaded = safeBytes;
+          }
+
+          setDownloadProgress((prev) => {
+            const bestPct = prev && prev.filename === item.filename ? Math.max(prev.percent, pct) : pct;
+            return {
+              current: i + 1,
+              total,
+              filename: item.filename,
+              percent: Math.min(100, bestPct),
+              loadedBytes: displayedLoaded,
+              totalBytes: expectedTotal,
+              phase,
+            };
           });
         });
         downloadedCount++;
@@ -578,7 +613,7 @@ export const FileDropDeck: React.FC<FileDropDeckProps> = ({ apiClient }) => {
               <Text style={styles.progressDetailText}>
                 {downloadProgress.phase === 'saving'
                   ? `Writing to storage (${downloadProgress.current} of ${downloadProgress.total})`
-                  : `Receiving ${downloadProgress.current} of ${downloadProgress.total}`}
+                  : `Receiving from host (${downloadProgress.current} of ${downloadProgress.total})`}
               </Text>
               {downloadProgress.totalBytes > 0 && (
                 <Text style={styles.progressDetailText}>
