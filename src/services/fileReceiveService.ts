@@ -126,12 +126,13 @@ export async function promptSelectDownloadDirectory(): Promise<string | null> {
  */
 export async function downloadAndSaveSharedFile(
   apiClient: ApiClient,
-  item: SharedFileItem
+  item: SharedFileItem,
+  onProgress?: (bytesDownloaded: number, totalBytes: number) => void
 ): Promise<{ success: boolean; savedPath: string }> {
   const safeBasename = item.filename.replace(/[/\\:*?"<>|]/g, '_') || 'download.bin';
 
-  // 1. Download file to temporary cache directory
-  const tempCacheUri = await apiClient.downloadSharedFileToCache(item.id, safeBasename);
+  // 1. Download file to temporary cache directory with live progress
+  const tempCacheUri = await apiClient.downloadSharedFileToCache(item.id, safeBasename, onProgress);
 
   // 2. Save to Android public storage using StorageAccessFramework
   if (Platform.OS === 'android') {
@@ -147,9 +148,8 @@ export async function downloadAndSaveSharedFile(
 
     try {
       const mimeType = getMimeType(safeBasename);
-      const base64Data = await FileSystem.readAsStringAsync(tempCacheUri, {
-        encoding: FileSystem.EncodingType.Base64,
-      });
+      const info = await FileSystem.getInfoAsync(tempCacheUri);
+      const fileSize = info.exists && info.size ? info.size : 0;
 
       const targetSafUri = await StorageAccessFramework.createFileAsync(
         dirUri,
@@ -157,9 +157,25 @@ export async function downloadAndSaveSharedFile(
         mimeType
       );
 
-      await StorageAccessFramework.writeAsStringAsync(targetSafUri, base64Data, {
-        encoding: FileSystem.EncodingType.Base64,
-      });
+      // Stream file in 2MB chunks to avoid Hermes OutOfMemory on large files (200MB+)
+      const CHUNK_SIZE = 2 * 1024 * 1024;
+      let position = 0;
+
+      while (position < fileSize) {
+        const chunkLen = Math.min(CHUNK_SIZE, fileSize - position);
+        const chunkBase64 = await FileSystem.readAsStringAsync(tempCacheUri, {
+          encoding: FileSystem.EncodingType.Base64,
+          position,
+          length: chunkLen,
+        });
+
+        await StorageAccessFramework.writeAsStringAsync(targetSafUri, chunkBase64, {
+          encoding: FileSystem.EncodingType.Base64,
+          append: position > 0,
+        });
+
+        position += chunkLen;
+      }
 
       // Remove temp cache file
       await FileSystem.deleteAsync(tempCacheUri, { idempotent: true });

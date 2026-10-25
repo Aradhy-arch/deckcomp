@@ -82,19 +82,12 @@ export function formatErrorMessage(err: unknown, fallback: string = 'An error oc
     message = String(err);
   }
 
-  // Sanitize internal native module, Java, OkHttp, or cryptic filesystem exceptions
+  // Sanitize internal native module, Java, OkHttp, or cryptic filesystem exceptions if purely technical
   if (
     !message ||
-    /call to function/i.test(message) ||
-    /has been rejected/i.test(message) ||
-    /unreadable/i.test(message) ||
-    /exponentfilesystem/i.test(message) ||
-    /java\./i.test(message) ||
-    /okhttp/i.test(message) ||
-    /exception/i.test(message) ||
-    /nullpointer/i.test(message) ||
-    /undefined/i.test(message) ||
-    /errno/i.test(message)
+    /call to function.*has been rejected/i.test(message) ||
+    /^java\.[a-z]+\.[A-Za-z]+Exception/i.test(message) ||
+    /nullpointerexception/i.test(message)
   ) {
     return 'An error occurred';
   }
@@ -287,75 +280,71 @@ export class ApiClient {
     const authQuery = this.authToken ? `?token=${encodeURIComponent(this.authToken)}` : '';
     const uploadUrl = `${this.baseUrl}/drop${authQuery}`;
 
-    return new Promise<DropResult>((resolve, reject) => {
-      try {
-        const xhr = new XMLHttpRequest();
-        xhr.open('POST', uploadUrl);
-
-        if (this.authToken) {
-          xhr.setRequestHeader('Authorization', `Bearer ${this.authToken}`);
+    try {
+      const uploadTask = FileSystem.createUploadTask(
+        uploadUrl,
+        uri,
+        {
+          headers: {
+            ...(this.authToken ? { Authorization: `Bearer ${this.authToken}` } : {}),
+            Accept: 'application/json',
+          },
+          httpMethod: 'POST',
+          uploadType: FileSystem.FileSystemUploadType.MULTIPART,
+          fieldName: 'file',
+          parameters: {
+            filename: filename,
+          },
+          mimeType: mimeType || 'application/octet-stream',
+        },
+        (progressData) => {
+          if (onProgress && progressData.totalBytesExpectedToSend > 0) {
+            onProgress(
+              Math.min(progressData.totalBytesSent, progressData.totalBytesExpectedToSend),
+              progressData.totalBytesExpectedToSend
+            );
+          }
         }
-        xhr.setRequestHeader('Accept', 'application/json');
+      );
 
-        if (xhr.upload && onProgress) {
-          xhr.upload.onprogress = (evt) => {
-            if (evt.lengthComputable && evt.total > 0) {
-              onProgress(evt.loaded, evt.total);
-            }
+      const res = await uploadTask.uploadAsync();
+      if (!res) {
+        throw new ApiErrorResponse('Upload was interrupted or cancelled', 'UPLOAD_CANCELLED');
+      }
+
+      if (res.status >= 200 && res.status < 300) {
+        try {
+          const data = JSON.parse(res.body);
+          return data as DropResult;
+        } catch {
+          return {
+            status: 'saved',
+            original_filename: filename,
+            saved_filename: filename,
+            path: `Downloads/${filename}`,
+            size_bytes: 0,
           };
         }
-
-        xhr.onload = () => {
-          if (xhr.status >= 200 && xhr.status < 300) {
-            try {
-              const data = JSON.parse(xhr.responseText);
-              resolve(data as DropResult);
-            } catch {
-              resolve({
-                status: 'saved',
-                original_filename: filename,
-                saved_filename: filename,
-                path: `Downloads/${filename}`,
-                size_bytes: 0,
-              });
-            }
-          } else {
-            let errorDetail = 'An error occurred';
-            try {
-              const errData = JSON.parse(xhr.responseText);
-              if (errData?.detail) {
-                errorDetail = errData.detail;
-              }
-            } catch {}
-            reject(new ApiErrorResponse(errorDetail, `HTTP_${xhr.status}`));
+      } else {
+        let errorDetail = 'Upload failed';
+        try {
+          const errData = JSON.parse(res.body);
+          if (errData?.detail) {
+            errorDetail = errData.detail;
           }
-        };
-
-        xhr.onerror = () => {
-          reject(new ApiErrorResponse('An error occurred', 'UPLOAD_ERROR'));
-        };
-
-        xhr.ontimeout = () => {
-          reject(new ApiErrorResponse('Host is disconnected', 'HOST_DISCONNECTED'));
-        };
-
-        const formData = new FormData();
-        formData.append('file', {
-          uri,
-          name: filename,
-          type: mimeType || 'application/octet-stream',
-        } as any);
-        formData.append('filename', filename);
-
-        xhr.send(formData);
-      } catch (err: unknown) {
-        if (isHostDisconnectedError(err)) {
-          reject(new ApiErrorResponse('Host is disconnected', 'HOST_DISCONNECTED'));
-        } else {
-          reject(new ApiErrorResponse('An error occurred', 'UPLOAD_ERROR'));
-        }
+        } catch {}
+        throw new ApiErrorResponse(errorDetail, `HTTP_${res.status}`);
       }
-    });
+    } catch (err: unknown) {
+      if (err instanceof ApiErrorResponse) throw err;
+      if (isHostDisconnectedError(err)) {
+        throw new ApiErrorResponse('Host is disconnected', 'HOST_DISCONNECTED');
+      }
+      throw new ApiErrorResponse(
+        err instanceof Error ? err.message : 'Upload failed',
+        'UPLOAD_ERROR'
+      );
+    }
   }
 
   // 9. Pairing & Multi-device Authentication
@@ -396,7 +385,11 @@ export class ApiClient {
     return this.request<SharedFileItem[]>('/share/pending');
   }
 
-  async downloadSharedFileToCache(fileId: string, filename: string): Promise<string> {
+  async downloadSharedFileToCache(
+    fileId: string,
+    filename: string,
+    onProgress?: (bytesDownloaded: number, totalBytes: number) => void
+  ): Promise<string> {
     try {
       const downloadUrl = `${this.baseUrl}/share/download/${fileId}`;
       const safeBasename = filename.replace(/[/\\:*?"<>|]/g, '_') || 'download.bin';
@@ -407,9 +400,24 @@ export class ApiClient {
         ...(this.authToken ? { Authorization: `Bearer ${this.authToken}` } : {}),
       };
 
-      const downloadRes = await FileSystem.downloadAsync(downloadUrl, targetUri, {
-        headers,
-      });
+      const downloadResumable = FileSystem.createDownloadResumable(
+        downloadUrl,
+        targetUri,
+        { headers },
+        (downloadProgress) => {
+          if (onProgress) {
+            onProgress(
+              downloadProgress.totalBytesWritten,
+              downloadProgress.totalBytesExpectedToWrite
+            );
+          }
+        }
+      );
+
+      const downloadRes = await downloadResumable.downloadAsync();
+      if (!downloadRes) {
+        throw new ApiErrorResponse('Download was interrupted or cancelled', 'DOWNLOAD_CANCELLED');
+      }
       if (downloadRes.status < 200 || downloadRes.status >= 300) {
         throw new ApiErrorResponse(`Download failed with status ${downloadRes.status}`, `HTTP_${downloadRes.status}`);
       }

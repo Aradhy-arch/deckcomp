@@ -63,6 +63,9 @@ export const FileDropDeck: React.FC<FileDropDeckProps> = ({ apiClient }) => {
     current: number;
     total: number;
     filename: string;
+    percent: number;
+    loadedBytes: number;
+    totalBytes: number;
   } | null>(null);
   const [downloadSuccess, setDownloadSuccess] = useState<string | null>(null);
   const [downloadFolderUri, setDownloadFolderUri] = useState<string | null>(null);
@@ -155,14 +158,16 @@ export const FileDropDeck: React.FC<FileDropDeckProps> = ({ apiClient }) => {
           file.name,
           file.mimeType || 'application/octet-stream',
           (bytesSent, totalBytes) => {
-            const pct = totalBytes > 0 ? Math.min(100, Math.round((bytesSent / totalBytes) * 100)) : 0;
+            const expectedTotal = totalBytes > 0 ? totalBytes : file.size || 0;
+            const safeSent = Math.min(bytesSent, expectedTotal > 0 ? expectedTotal : bytesSent);
+            const pct = expectedTotal > 0 ? Math.min(100, Math.round((safeSent / expectedTotal) * 100)) : 0;
             setUploadProgress({
               current: i + 1,
               total: selectedFiles.length,
               filename: file.name,
               percent: pct,
-              loadedBytes: bytesSent,
-              totalBytes,
+              loadedBytes: safeSent,
+              totalBytes: expectedTotal,
             });
           }
         );
@@ -194,8 +199,26 @@ export const FileDropDeck: React.FC<FileDropDeckProps> = ({ apiClient }) => {
     }
     setDownloadingId(item.id);
     setErrorMsg(null);
+    setDownloadProgress({
+      current: 1,
+      total: 1,
+      filename: item.filename,
+      percent: 0,
+      loadedBytes: 0,
+      totalBytes: item.size_bytes || 0,
+    });
     try {
-      const res = await downloadAndSaveSharedFile(apiClient, item);
+      const res = await downloadAndSaveSharedFile(apiClient, item, (bytes, total) => {
+        const pct = total > 0 ? Math.min(100, Math.round((bytes / total) * 100)) : 0;
+        setDownloadProgress({
+          current: 1,
+          total: 1,
+          filename: item.filename,
+          percent: pct,
+          loadedBytes: bytes,
+          totalBytes: total > 0 ? total : item.size_bytes || 0,
+        });
+      });
       notifyFileDownloadCompleted(item.filename, res.savedPath).catch(() => {});
       setPendingShares((prev) => prev.filter((p) => p.id !== item.id));
       setDownloadSuccess(`Saved "${item.filename}" to ${res.savedPath}`);
@@ -206,6 +229,7 @@ export const FileDropDeck: React.FC<FileDropDeckProps> = ({ apiClient }) => {
       setErrorMsg(formatErrorMessage(err, 'An error occurred'));
     } finally {
       setDownloadingId(null);
+      setDownloadProgress(null);
     }
   };
 
@@ -224,14 +248,28 @@ export const FileDropDeck: React.FC<FileDropDeckProps> = ({ apiClient }) => {
 
     for (let i = 0; i < total; i++) {
       const item = remaining[i];
+      setDownloadingId(item.id);
       setDownloadProgress({
         current: i + 1,
         total,
         filename: item.filename,
+        percent: 0,
+        loadedBytes: 0,
+        totalBytes: item.size_bytes || 0,
       });
 
       try {
-        const res = await downloadAndSaveSharedFile(apiClient, item);
+        const res = await downloadAndSaveSharedFile(apiClient, item, (bytes, itemTotal) => {
+          const pct = itemTotal > 0 ? Math.min(100, Math.round((bytes / itemTotal) * 100)) : 0;
+          setDownloadProgress({
+            current: i + 1,
+            total,
+            filename: item.filename,
+            percent: pct,
+            loadedBytes: bytes,
+            totalBytes: itemTotal > 0 ? itemTotal : item.size_bytes || 0,
+          });
+        });
         downloadedCount++;
         lastSavedPath = res.savedPath;
         notifyFileDownloadCompleted(item.filename, res.savedPath).catch(() => {});
@@ -241,6 +279,7 @@ export const FileDropDeck: React.FC<FileDropDeckProps> = ({ apiClient }) => {
       }
     }
 
+    setDownloadingId(null);
     setDownloadingAll(false);
     setDownloadProgress(null);
 
@@ -506,13 +545,38 @@ export const FileDropDeck: React.FC<FileDropDeckProps> = ({ apiClient }) => {
           </View>
         )}
 
-        {downloadingAll && downloadProgress && (
-          <View style={styles.downloadingAllBanner}>
-            <ActivityIndicator size="small" color={Palette.teal} style={{ marginRight: 8 }} />
-            <Text style={styles.downloadingAllText} numberOfLines={1}>
-              Downloading {downloadProgress.current} of {downloadProgress.total}:{' '}
-              {downloadProgress.filename}
-            </Text>
+        {/* Live Visual Download Progress Bar */}
+        {(downloadingId || downloadingAll) && downloadProgress && (
+          <View style={styles.downloadProgressContainer}>
+            <View style={styles.progressHeaderRow}>
+              <Text style={styles.progressFileName} numberOfLines={1} ellipsizeMode="middle">
+                {downloadProgress.filename}
+              </Text>
+              <Text style={styles.downloadProgressPercentText}>
+                {downloadProgress.percent}%
+              </Text>
+            </View>
+
+            {/* Progress Bar Track & Fill */}
+            <View style={styles.progressBarTrack}>
+              <View
+                style={[
+                  styles.downloadProgressBarFill,
+                  { width: `${Math.max(1, Math.min(100, downloadProgress.percent))}%` },
+                ]}
+              />
+            </View>
+
+            <View style={styles.progressDetailsRow}>
+              <Text style={styles.progressDetailText}>
+                Receiving {downloadProgress.current} of {downloadProgress.total}
+              </Text>
+              {downloadProgress.totalBytes > 0 && (
+                <Text style={styles.progressDetailText}>
+                  {formatSize(downloadProgress.loadedBytes)} / {formatSize(downloadProgress.totalBytes)}
+                </Text>
+              )}
+            </View>
           </View>
         )}
 
@@ -977,6 +1041,15 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: 'rgba(205, 214, 244, 0.1)',
   },
+  downloadProgressContainer: {
+    backgroundColor: Palette.surface1,
+    borderRadius: 10,
+    padding: 12,
+    marginTop: 8,
+    marginBottom: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(148, 226, 213, 0.25)',
+  },
   progressHeaderRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -995,6 +1068,11 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     color: Palette.sapphire,
   },
+  downloadProgressPercentText: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: Palette.teal,
+  },
   progressBarTrack: {
     height: 8,
     backgroundColor: Palette.surface0,
@@ -1006,6 +1084,11 @@ const styles = StyleSheet.create({
   progressBarFill: {
     height: '100%',
     backgroundColor: Palette.sapphire,
+    borderRadius: 4,
+  },
+  downloadProgressBarFill: {
+    height: '100%',
+    backgroundColor: Palette.teal,
     borderRadius: 4,
   },
   progressDetailsRow: {
