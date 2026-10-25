@@ -127,12 +127,18 @@ export async function promptSelectDownloadDirectory(): Promise<string | null> {
 export async function downloadAndSaveSharedFile(
   apiClient: ApiClient,
   item: SharedFileItem,
-  onProgress?: (bytesDownloaded: number, totalBytes: number) => void
+  onProgress?: (bytes: number, total: number, phase: 'downloading' | 'saving') => void
 ): Promise<{ success: boolean; savedPath: string }> {
   const safeBasename = item.filename.replace(/[/\\:*?"<>|]/g, '_') || 'download.bin';
 
   // 1. Download file to temporary cache directory with live progress
-  const tempCacheUri = await apiClient.downloadSharedFileToCache(item.id, safeBasename, onProgress);
+  const tempCacheUri = await apiClient.downloadSharedFileToCache(
+    item.id,
+    safeBasename,
+    (bytes, total) => {
+      onProgress?.(bytes, total, 'downloading');
+    }
+  );
 
   // 2. Save to Android public storage using StorageAccessFramework
   if (Platform.OS === 'android') {
@@ -175,6 +181,7 @@ export async function downloadAndSaveSharedFile(
         });
 
         position += chunkLen;
+        onProgress?.(position, fileSize, 'saving');
       }
 
       // Remove temp cache file

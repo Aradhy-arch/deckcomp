@@ -66,6 +66,7 @@ export const FileDropDeck: React.FC<FileDropDeckProps> = ({ apiClient }) => {
     percent: number;
     loadedBytes: number;
     totalBytes: number;
+    phase?: 'downloading' | 'saving';
   } | null>(null);
   const [downloadSuccess, setDownloadSuccess] = useState<string | null>(null);
   const [downloadFolderUri, setDownloadFolderUri] = useState<string | null>(null);
@@ -208,15 +209,18 @@ export const FileDropDeck: React.FC<FileDropDeckProps> = ({ apiClient }) => {
       totalBytes: item.size_bytes || 0,
     });
     try {
-      const res = await downloadAndSaveSharedFile(apiClient, item, (bytes, total) => {
-        const pct = total > 0 ? Math.min(100, Math.round((bytes / total) * 100)) : 0;
+      const res = await downloadAndSaveSharedFile(apiClient, item, (bytes, total, phase) => {
+        const expectedTotal = total > 0 ? total : item.size_bytes || 0;
+        const safeBytes = Math.min(bytes, expectedTotal > 0 ? expectedTotal : bytes);
+        const pct = expectedTotal > 0 ? Math.min(100, Math.round((safeBytes / expectedTotal) * 100)) : 0;
         setDownloadProgress({
           current: 1,
           total: 1,
           filename: item.filename,
           percent: pct,
-          loadedBytes: bytes,
-          totalBytes: total > 0 ? total : item.size_bytes || 0,
+          loadedBytes: safeBytes,
+          totalBytes: expectedTotal,
+          phase,
         });
       });
       notifyFileDownloadCompleted(item.filename, res.savedPath).catch(() => {});
@@ -259,15 +263,18 @@ export const FileDropDeck: React.FC<FileDropDeckProps> = ({ apiClient }) => {
       });
 
       try {
-        const res = await downloadAndSaveSharedFile(apiClient, item, (bytes, itemTotal) => {
-          const pct = itemTotal > 0 ? Math.min(100, Math.round((bytes / itemTotal) * 100)) : 0;
+        const res = await downloadAndSaveSharedFile(apiClient, item, (bytes, itemTotal, phase) => {
+          const expectedTotal = itemTotal > 0 ? itemTotal : item.size_bytes || 0;
+          const safeBytes = Math.min(bytes, expectedTotal > 0 ? expectedTotal : bytes);
+          const pct = expectedTotal > 0 ? Math.min(100, Math.round((safeBytes / expectedTotal) * 100)) : 0;
           setDownloadProgress({
             current: i + 1,
             total,
             filename: item.filename,
             percent: pct,
-            loadedBytes: bytes,
-            totalBytes: itemTotal > 0 ? itemTotal : item.size_bytes || 0,
+            loadedBytes: safeBytes,
+            totalBytes: expectedTotal,
+            phase,
           });
         });
         downloadedCount++;
@@ -569,7 +576,9 @@ export const FileDropDeck: React.FC<FileDropDeckProps> = ({ apiClient }) => {
 
             <View style={styles.progressDetailsRow}>
               <Text style={styles.progressDetailText}>
-                Receiving {downloadProgress.current} of {downloadProgress.total}
+                {downloadProgress.phase === 'saving'
+                  ? `Writing to storage (${downloadProgress.current} of ${downloadProgress.total})`
+                  : `Receiving ${downloadProgress.current} of ${downloadProgress.total}`}
               </Text>
               {downloadProgress.totalBytes > 0 && (
                 <Text style={styles.progressDetailText}>

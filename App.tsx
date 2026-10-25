@@ -1,6 +1,7 @@
 import * as Battery from 'expo-battery';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
+import * as Updates from 'expo-updates';
 import { Laptop, LayoutGrid, Radio, SlidersHorizontal, Terminal, Upload } from 'lucide-react-native';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
@@ -112,6 +113,23 @@ function DeckCompMain() {
   useEffect(() => {
     clientBatteryRef.current = clientBattery;
   }, [clientBattery]);
+
+  // Check and apply OTA updates automatically
+  useEffect(() => {
+    async function checkOtaUpdates() {
+      if (__DEV__) return;
+      try {
+        const check = await Updates.checkForUpdateAsync();
+        if (check.isAvailable) {
+          await Updates.fetchUpdateAsync();
+          await Updates.reloadAsync();
+        }
+      } catch {
+        // Silently ignore if offline
+      }
+    }
+    checkOtaUpdates();
+  }, []);
 
   // Initialize Host Config from AsyncStorage
   useEffect(() => {

@@ -3,12 +3,14 @@ import {
   Laptop,
   Plus,
   Radio,
+  RefreshCw,
   Settings,
   Trash2,
   Wifi,
   WifiOff,
   X,
 } from 'lucide-react-native';
+import * as Updates from 'expo-updates';
 import React, { useEffect, useRef, useState } from 'react';
 import {
   Animated,
@@ -54,7 +56,36 @@ export const SideDrawer: React.FC<SideDrawerProps> = ({
 }) => {
   const [unpairTarget, setUnpairTarget] = useState<{ id: string; name: string } | null>(null);
   const [modalVisible, setModalVisible] = useState(visible);
+  const [checkingUpdate, setCheckingUpdate] = useState(false);
+  const [updateStatusText, setUpdateStatusText] = useState<string | null>(null);
   const isClosingRef = useRef(false);
+
+  const handleCheckForUpdates = async () => {
+    if (__DEV__) {
+      setUpdateStatusText('Updates disabled in Dev');
+      setTimeout(() => setUpdateStatusText(null), 3000);
+      return;
+    }
+    setCheckingUpdate(true);
+    setUpdateStatusText('Checking...');
+    try {
+      const check = await Updates.checkForUpdateAsync();
+      if (check.isAvailable) {
+        setUpdateStatusText('Downloading update...');
+        await Updates.fetchUpdateAsync();
+        setUpdateStatusText('Restarting app...');
+        await Updates.reloadAsync();
+      } else {
+        setUpdateStatusText('App is up to date!');
+        setTimeout(() => setUpdateStatusText(null), 3500);
+      }
+    } catch {
+      setUpdateStatusText('Check failed (offline)');
+      setTimeout(() => setUpdateStatusText(null), 3500);
+    } finally {
+      setCheckingUpdate(false);
+    }
+  };
 
   const slideAnim = useRef(new Animated.Value(-DRAWER_WIDTH)).current;
   const fadeAnim = useRef(new Animated.Value(0)).current;
@@ -302,6 +333,18 @@ export const SideDrawer: React.FC<SideDrawerProps> = ({
             >
               <HelpCircle size={15} color={Palette.subtext0} />
               <Text style={styles.footerItemText}>App Onboarding Tour</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.footerItem}
+              onPress={handleCheckForUpdates}
+              disabled={checkingUpdate}
+              activeOpacity={0.7}
+            >
+              <RefreshCw size={15} color={checkingUpdate ? Palette.mauve : Palette.subtext0} />
+              <Text style={[styles.footerItemText, updateStatusText ? { color: Palette.mauve } : null]}>
+                {updateStatusText || 'Check for App Updates'}
+              </Text>
             </TouchableOpacity>
           </View>
         </Animated.View>
