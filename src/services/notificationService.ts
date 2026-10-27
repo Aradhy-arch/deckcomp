@@ -419,3 +419,106 @@ export async function notifyFileDownloadCompleted(filename: string, folder?: str
     });
   } catch {}
 }
+
+const TRANSFER_PROGRESS_NOTIF_ID = 'deck_active_transfer_progress';
+let lastProgressNotifTime = 0;
+
+function formatNotificationBytes(bytes: number): string {
+  if (!bytes || bytes <= 0) return '0 B';
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function formatNotificationSpeed(bytesPerSec: number): string {
+  if (!bytesPerSec || bytesPerSec <= 0) return '';
+  if (bytesPerSec < 1024) return `${Math.round(bytesPerSec)} B/s`;
+  if (bytesPerSec < 1024 * 1024) return `${(bytesPerSec / 1024).toFixed(1)} KB/s`;
+  return `${(bytesPerSec / (1024 * 1024)).toFixed(1)} MB/s`;
+}
+
+function formatNotificationEta(seconds: number | null | undefined): string {
+  if (!seconds || seconds <= 0 || !isFinite(seconds)) return '';
+  if (seconds < 60) return `~${Math.round(seconds)}s left`;
+  const mins = Math.floor(seconds / 60);
+  const secs = Math.round(seconds % 60);
+  return `~${mins}m ${secs}s left`;
+}
+
+export interface TransferProgressNotifParams {
+  type: 'upload' | 'download';
+  filename: string;
+  current: number;
+  total: number;
+  percent: number;
+  loadedBytes: number;
+  totalBytes: number;
+  speedBytesPerSec?: number;
+  etaSeconds?: number | null;
+  phase?: 'downloading' | 'saving';
+}
+
+export async function showTransferProgressNotification(
+  params: TransferProgressNotifParams,
+  force: boolean = false
+) {
+  if (!isNotificationsSupported()) return;
+  const Notifications = getNotificationsModule();
+  if (!Notifications) return;
+
+  const now = Date.now();
+  // Throttle updates to at most once every 700ms unless forced or reached 100%
+  if (!force && params.percent < 100 && now - lastProgressNotifTime < 700) {
+    return;
+  }
+  lastProgressNotifTime = now;
+
+  const { type, filename, current, total, percent, loadedBytes, totalBytes, speedBytesPerSec, etaSeconds, phase } = params;
+
+  let title = type === 'upload' ? 'DeckComp • Sending File' : 'DeckComp • Receiving File';
+  if (total > 1) {
+    title += ` (${current}/${total})`;
+  }
+
+  const loadedStr = formatNotificationBytes(loadedBytes);
+  const totalStr = formatNotificationBytes(totalBytes);
+  const speedStr = formatNotificationSpeed(speedBytesPerSec || 0);
+  const etaStr = formatNotificationEta(etaSeconds);
+
+  let body = `${filename} • ${percent}%`;
+  if (phase === 'saving') {
+    body = `${filename} • Saving to storage (${percent}%)`;
+  } else if (totalBytes > 0) {
+    body += ` (${loadedStr} / ${totalStr})`;
+    if (speedStr) body += ` • ${speedStr}`;
+    if (etaStr) body += ` • ${etaStr}`;
+  }
+
+  try {
+    await Notifications.scheduleNotificationAsync({
+      identifier: TRANSFER_PROGRESS_NOTIF_ID,
+      content: {
+        title,
+        body,
+        sticky: true,
+        autoDismiss: false,
+        sound: undefined,
+        priority: Notifications.AndroidNotificationPriority.MIN,
+        color: '#89b4fa',
+      },
+      trigger: {
+        channelId: SILENT_CHANNEL_ID,
+      },
+    });
+  } catch {}
+}
+
+export async function dismissTransferProgressNotification() {
+  if (!isNotificationsSupported()) return;
+  const Notifications = getNotificationsModule();
+  if (!Notifications) return;
+
+  try {
+    await Notifications.dismissNotificationAsync(TRANSFER_PROGRESS_NOTIF_ID);
+  } catch {}
+}

@@ -103,7 +103,8 @@ function DeckCompMain() {
 
   const isMountedRef = useRef(true);
   const isPollingRef = useRef(false);
-  const pollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const backgroundPollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const apiClientRef = useRef<ApiClient | null>(null);
   const configGenRef = useRef(0);
   const notifiedSharesRef = useRef<Set<string>>(new Set());
@@ -193,6 +194,11 @@ function DeckCompMain() {
       isMountedRef.current = false;
       if (pollTimerRef.current) {
         clearInterval(pollTimerRef.current);
+        pollTimerRef.current = null;
+      }
+      if (backgroundPollTimerRef.current) {
+        clearInterval(backgroundPollTimerRef.current);
+        backgroundPollTimerRef.current = null;
       }
     };
   }, []);
@@ -333,6 +339,28 @@ function DeckCompMain() {
     }
   }, [hostAddressLoaded, hostConfig.hostIp]);
 
+  // Lightweight background poller: checks for incoming files from host when app is minimized
+  const checkPendingSharesInBackground = useCallback(async () => {
+    const client = apiClientRef.current;
+    if (!client) return;
+    try {
+      const shares = await client.listPendingShares();
+      if (Array.isArray(shares)) {
+        for (const share of shares) {
+          if (!notifiedSharesRef.current.has(share.id)) {
+            notifiedSharesRef.current.add(share.id);
+            notifyIncomingFileFromHost(
+              share,
+              hostname || currentDevice?.name || 'Linux Workstation'
+            );
+          }
+        }
+      }
+    } catch {
+      // Silently ignore background network errors
+    }
+  }, [hostname, currentDevice?.name]);
+
   // Periodic polling management with 12s interval and AppState guard
   useEffect(() => {
     if (!hostAddressLoaded) return;
@@ -341,6 +369,10 @@ function DeckCompMain() {
 
     const handleAppStateChange = (nextAppState: AppStateStatus) => {
       if (nextAppState === 'active') {
+        if (backgroundPollTimerRef.current) {
+          clearInterval(backgroundPollTimerRef.current);
+          backgroundPollTimerRef.current = null;
+        }
         fetchWorkstationData();
         if (!pollTimerRef.current) {
           pollTimerRef.current = setInterval(fetchWorkstationData, 12000);
@@ -349,6 +381,10 @@ function DeckCompMain() {
         if (pollTimerRef.current) {
           clearInterval(pollTimerRef.current);
           pollTimerRef.current = null;
+        }
+        if (!backgroundPollTimerRef.current) {
+          backgroundPollTimerRef.current = setInterval(checkPendingSharesInBackground, 4000);
+          checkPendingSharesInBackground();
         }
       }
     };
@@ -362,8 +398,12 @@ function DeckCompMain() {
         clearInterval(pollTimerRef.current);
         pollTimerRef.current = null;
       }
+      if (backgroundPollTimerRef.current) {
+        clearInterval(backgroundPollTimerRef.current);
+        backgroundPollTimerRef.current = null;
+      }
     };
-  }, [hostAddressLoaded, fetchWorkstationData]);
+  }, [hostAddressLoaded, fetchWorkstationData, checkPendingSharesInBackground]);
 
   // Manual pull-to-refresh: immediately re-reads phone battery and workstation metrics
   const handleRefresh = async () => {

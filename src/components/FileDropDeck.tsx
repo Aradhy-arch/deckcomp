@@ -11,7 +11,7 @@ import {
   UploadCloud,
   X,
 } from 'lucide-react-native';
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   ScrollView,
@@ -29,9 +29,11 @@ import {
   promptSelectDownloadDirectory,
 } from '../services/fileReceiveService';
 import {
+  dismissTransferProgressNotification,
   notifyFileDownloadCompleted,
   notifyFileSendCompleted,
   notifyFileSendStarted,
+  showTransferProgressNotification,
 } from '../services/notificationService';
 import { DropResult, SharedFileItem } from '../types';
 
@@ -50,6 +52,8 @@ export const FileDropDeck: React.FC<FileDropDeckProps> = ({ apiClient }) => {
     percent: number;
     loadedBytes: number;
     totalBytes: number;
+    speedBytesPerSec: number;
+    etaSeconds: number | null;
   } | null>(null);
   const [batchResults, setBatchResults] = useState<DropResult[]>([]);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -66,13 +70,31 @@ export const FileDropDeck: React.FC<FileDropDeckProps> = ({ apiClient }) => {
     percent: number;
     loadedBytes: number;
     totalBytes: number;
+    speedBytesPerSec: number;
+    etaSeconds: number | null;
     phase?: 'downloading' | 'saving';
   } | null>(null);
   const [downloadSuccess, setDownloadSuccess] = useState<string | null>(null);
   const [downloadFolderUri, setDownloadFolderUri] = useState<string | null>(null);
 
+  // Speed and ETA calculation tracking refs
+  const uploadSpeedRef = useRef<{
+    lastBytes: number;
+    lastTime: number;
+    smoothedSpeed: number;
+  }>({ lastBytes: 0, lastTime: 0, smoothedSpeed: 0 });
+
+  const downloadSpeedRef = useRef<{
+    lastBytes: number;
+    lastTime: number;
+    smoothedSpeed: number;
+  }>({ lastBytes: 0, lastTime: 0, smoothedSpeed: 0 });
+
   useEffect(() => {
     getSavedDownloadDirectoryUri().then(setDownloadFolderUri);
+    return () => {
+      dismissTransferProgressNotification().catch(() => {});
+    };
   }, []);
 
   const handlePickDownloadFolder = async () => {
@@ -141,50 +163,112 @@ export const FileDropDeck: React.FC<FileDropDeckProps> = ({ apiClient }) => {
     const results: DropResult[] = [];
     const errors: string[] = [];
 
-    for (let i = 0; i < selectedFiles.length; i++) {
-      const file = selectedFiles[i];
-      notifyFileSendStarted(file.name).catch(() => {});
-      setUploadProgress({
-        current: i + 1,
-        total: selectedFiles.length,
-        filename: file.name,
-        percent: 0,
-        loadedBytes: 0,
-        totalBytes: file.size || 0,
-      });
+    try {
+      for (let i = 0; i < selectedFiles.length; i++) {
+        const file = selectedFiles[i];
+        notifyFileSendStarted(file.name).catch(() => {});
+        uploadSpeedRef.current = {
+          lastBytes: 0,
+          lastTime: Date.now(),
+          smoothedSpeed: 0,
+        };
+        setUploadProgress({
+          current: i + 1,
+          total: selectedFiles.length,
+          filename: file.name,
+          percent: 0,
+          loadedBytes: 0,
+          totalBytes: file.size || 0,
+          speedBytesPerSec: 0,
+          etaSeconds: null,
+        });
+        showTransferProgressNotification(
+          {
+            type: 'upload',
+            filename: file.name,
+            current: i + 1,
+            total: selectedFiles.length,
+            percent: 0,
+            loadedBytes: 0,
+            totalBytes: file.size || 0,
+            speedBytesPerSec: 0,
+            etaSeconds: null,
+          },
+          true
+        ).catch(() => {});
 
-      try {
-        const dropRes = await apiClient.dropFile(
-          file.uri,
-          file.name,
-          file.mimeType || 'application/octet-stream',
-          (bytesSent, totalBytes) => {
-            const expectedTotal = totalBytes > 0 ? totalBytes : file.size || 0;
-            const safeSent = Math.min(bytesSent, expectedTotal > 0 ? expectedTotal : bytesSent);
-            const rawPct = expectedTotal > 0 ? Math.min(100, Math.round((safeSent / expectedTotal) * 100)) : 0;
-            setUploadProgress((prev) => {
-              const bestPct = prev && prev.filename === file.name ? Math.max(prev.percent, rawPct) : rawPct;
-              const bestLoaded = prev && prev.filename === file.name ? Math.max(prev.loadedBytes, safeSent) : safeSent;
-              return {
-                current: i + 1,
-                total: selectedFiles.length,
-                filename: file.name,
-                percent: Math.min(100, bestPct),
-                loadedBytes: Math.min(expectedTotal > 0 ? expectedTotal : bestLoaded, bestLoaded),
-                totalBytes: expectedTotal,
-              };
-            });
-          }
-        );
-        results.push(dropRes);
-        notifyFileSendCompleted(dropRes.saved_filename || file.name).catch(() => {});
-      } catch (err: unknown) {
-        errors.push(`${file.name}: ${formatErrorMessage(err, 'An error occurred')}`);
+        try {
+          const dropRes = await apiClient.dropFile(
+            file.uri,
+            file.name,
+            file.mimeType || 'application/octet-stream',
+            (bytesSent, totalBytes) => {
+              const expectedTotal = totalBytes > 0 ? totalBytes : file.size || 0;
+              const safeSent = Math.min(bytesSent, expectedTotal > 0 ? expectedTotal : bytesSent);
+              const rawPct = expectedTotal > 0 ? Math.min(100, Math.round((safeSent / expectedTotal) * 100)) : 0;
+
+              const now = Date.now();
+              const timeDelta = (now - uploadSpeedRef.current.lastTime) / 1000;
+              let currentSpeed = uploadSpeedRef.current.smoothedSpeed;
+
+              if (timeDelta >= 0.25) {
+                const bytesDelta = safeSent - uploadSpeedRef.current.lastBytes;
+                if (bytesDelta >= 0) {
+                  const instantSpeed = bytesDelta / timeDelta;
+                  currentSpeed = currentSpeed === 0 ? instantSpeed : 0.25 * instantSpeed + 0.75 * currentSpeed;
+                  uploadSpeedRef.current = {
+                    lastBytes: safeSent,
+                    lastTime: now,
+                    smoothedSpeed: currentSpeed,
+                  };
+                }
+              }
+
+              const remainingBytes = Math.max(0, expectedTotal - safeSent);
+              const eta = currentSpeed > 50000 ? Math.round(remainingBytes / currentSpeed) : null;
+
+              setUploadProgress((prev) => {
+                const bestPct = prev && prev.filename === file.name ? Math.max(prev.percent, rawPct) : rawPct;
+                const bestLoaded = prev && prev.filename === file.name ? Math.max(prev.loadedBytes, safeSent) : safeSent;
+                const loadedFinal = Math.min(expectedTotal > 0 ? expectedTotal : bestLoaded, bestLoaded);
+                const pctFinal = Math.min(100, bestPct);
+
+                showTransferProgressNotification({
+                  type: 'upload',
+                  filename: file.name,
+                  current: i + 1,
+                  total: selectedFiles.length,
+                  percent: pctFinal,
+                  loadedBytes: loadedFinal,
+                  totalBytes: expectedTotal,
+                  speedBytesPerSec: currentSpeed,
+                  etaSeconds: eta,
+                }).catch(() => {});
+
+                return {
+                  current: i + 1,
+                  total: selectedFiles.length,
+                  filename: file.name,
+                  percent: pctFinal,
+                  loadedBytes: loadedFinal,
+                  totalBytes: expectedTotal,
+                  speedBytesPerSec: currentSpeed,
+                  etaSeconds: eta,
+                };
+              });
+            }
+          );
+          results.push(dropRes);
+          notifyFileSendCompleted(dropRes.saved_filename || file.name).catch(() => {});
+        } catch (err: unknown) {
+          errors.push(`${file.name}: ${formatErrorMessage(err, 'An error occurred')}`);
+        }
       }
+    } finally {
+      setUploading(false);
+      setUploadProgress(null);
+      dismissTransferProgressNotification().catch(() => {});
     }
-
-    setUploading(false);
-    setUploadProgress(null);
 
     if (results.length > 0) {
       setBatchResults(results);
@@ -204,6 +288,11 @@ export const FileDropDeck: React.FC<FileDropDeckProps> = ({ apiClient }) => {
     }
     setDownloadingId(item.id);
     setErrorMsg(null);
+    downloadSpeedRef.current = {
+      lastBytes: 0,
+      lastTime: Date.now(),
+      smoothedSpeed: 0,
+    };
     setDownloadProgress({
       current: 1,
       total: 1,
@@ -211,7 +300,24 @@ export const FileDropDeck: React.FC<FileDropDeckProps> = ({ apiClient }) => {
       percent: 0,
       loadedBytes: 0,
       totalBytes: item.size_bytes || 0,
+      speedBytesPerSec: 0,
+      etaSeconds: null,
     });
+    showTransferProgressNotification(
+      {
+        type: 'download',
+        filename: item.filename,
+        current: 1,
+        total: 1,
+        percent: 0,
+        loadedBytes: 0,
+        totalBytes: item.size_bytes || 0,
+        speedBytesPerSec: 0,
+        etaSeconds: null,
+      },
+      true
+    ).catch(() => {});
+
     try {
       const res = await downloadAndSaveSharedFile(apiClient, item, (bytes, total, phase) => {
         const expectedTotal = total > 0 ? total : item.size_bytes || 0;
@@ -231,15 +337,52 @@ export const FileDropDeck: React.FC<FileDropDeckProps> = ({ apiClient }) => {
           displayedLoaded = safeBytes;
         }
 
+        const now = Date.now();
+        const timeDelta = (now - downloadSpeedRef.current.lastTime) / 1000;
+        let currentSpeed = downloadSpeedRef.current.smoothedSpeed;
+
+        if (timeDelta >= 0.25) {
+          const bytesDelta = safeBytes - downloadSpeedRef.current.lastBytes;
+          if (bytesDelta >= 0) {
+            const instantSpeed = bytesDelta / timeDelta;
+            currentSpeed = currentSpeed === 0 ? instantSpeed : 0.25 * instantSpeed + 0.75 * currentSpeed;
+            downloadSpeedRef.current = {
+              lastBytes: safeBytes,
+              lastTime: now,
+              smoothedSpeed: currentSpeed,
+            };
+          }
+        }
+
+        const remainingBytes = Math.max(0, expectedTotal - safeBytes);
+        const eta = currentSpeed > 50000 ? Math.round(remainingBytes / currentSpeed) : null;
+
         setDownloadProgress((prev) => {
           const bestPct = prev && prev.filename === item.filename ? Math.max(prev.percent, pct) : pct;
+          const pctFinal = Math.min(100, bestPct);
+
+          showTransferProgressNotification({
+            type: 'download',
+            filename: item.filename,
+            current: 1,
+            total: 1,
+            percent: pctFinal,
+            loadedBytes: displayedLoaded,
+            totalBytes: expectedTotal,
+            speedBytesPerSec: currentSpeed,
+            etaSeconds: phase === 'saving' ? null : eta,
+            phase,
+          }).catch(() => {});
+
           return {
             current: 1,
             total: 1,
             filename: item.filename,
-            percent: Math.min(100, bestPct),
+            percent: pctFinal,
             loadedBytes: displayedLoaded,
             totalBytes: expectedTotal,
+            speedBytesPerSec: currentSpeed,
+            etaSeconds: phase === 'saving' ? null : eta,
             phase,
           };
         });
@@ -255,6 +398,7 @@ export const FileDropDeck: React.FC<FileDropDeckProps> = ({ apiClient }) => {
     } finally {
       setDownloadingId(null);
       setDownloadProgress(null);
+      dismissTransferProgressNotification().catch(() => {});
     }
   };
 
@@ -271,59 +415,120 @@ export const FileDropDeck: React.FC<FileDropDeckProps> = ({ apiClient }) => {
     const errors: string[] = [];
     const remaining = [...pendingShares];
 
-    for (let i = 0; i < total; i++) {
-      const item = remaining[i];
-      setDownloadingId(item.id);
-      setDownloadProgress({
-        current: i + 1,
-        total,
-        filename: item.filename,
-        percent: 0,
-        loadedBytes: 0,
-        totalBytes: item.size_bytes || 0,
-      });
-
-      try {
-        const res = await downloadAndSaveSharedFile(apiClient, item, (bytes, itemTotal, phase) => {
-          const expectedTotal = itemTotal > 0 ? itemTotal : item.size_bytes || 0;
-          const safeBytes = Math.min(bytes, expectedTotal > 0 ? expectedTotal : bytes);
-          const fraction = expectedTotal > 0 ? safeBytes / expectedTotal : 0;
-
-          let pct: number;
-          let displayedLoaded: number;
-          if (phase === 'saving') {
-            pct = Math.min(100, Math.round(85 + fraction * 15));
-            displayedLoaded = expectedTotal;
-          } else {
-            pct = Math.min(85, Math.round(fraction * 85));
-            displayedLoaded = safeBytes;
-          }
-
-          setDownloadProgress((prev) => {
-            const bestPct = prev && prev.filename === item.filename ? Math.max(prev.percent, pct) : pct;
-            return {
-              current: i + 1,
-              total,
-              filename: item.filename,
-              percent: Math.min(100, bestPct),
-              loadedBytes: displayedLoaded,
-              totalBytes: expectedTotal,
-              phase,
-            };
-          });
+    try {
+      for (let i = 0; i < total; i++) {
+        const item = remaining[i];
+        setDownloadingId(item.id);
+        downloadSpeedRef.current = {
+          lastBytes: 0,
+          lastTime: Date.now(),
+          smoothedSpeed: 0,
+        };
+        setDownloadProgress({
+          current: i + 1,
+          total,
+          filename: item.filename,
+          percent: 0,
+          loadedBytes: 0,
+          totalBytes: item.size_bytes || 0,
+          speedBytesPerSec: 0,
+          etaSeconds: null,
         });
-        downloadedCount++;
-        lastSavedPath = res.savedPath;
-        notifyFileDownloadCompleted(item.filename, res.savedPath).catch(() => {});
-        setPendingShares((prev) => prev.filter((p) => p.id !== item.id));
-      } catch (err: unknown) {
-        errors.push(`${item.filename}: ${formatErrorMessage(err, 'An error occurred')}`);
-      }
-    }
+        showTransferProgressNotification(
+          {
+            type: 'download',
+            filename: item.filename,
+            current: i + 1,
+            total,
+            percent: 0,
+            loadedBytes: 0,
+            totalBytes: item.size_bytes || 0,
+            speedBytesPerSec: 0,
+            etaSeconds: null,
+          },
+          true
+        ).catch(() => {});
 
-    setDownloadingId(null);
-    setDownloadingAll(false);
-    setDownloadProgress(null);
+        try {
+          const res = await downloadAndSaveSharedFile(apiClient, item, (bytes, itemTotal, phase) => {
+            const expectedTotal = itemTotal > 0 ? itemTotal : item.size_bytes || 0;
+            const safeBytes = Math.min(bytes, expectedTotal > 0 ? expectedTotal : bytes);
+            const fraction = expectedTotal > 0 ? safeBytes / expectedTotal : 0;
+
+            let pct: number;
+            let displayedLoaded: number;
+            if (phase === 'saving') {
+              pct = Math.min(100, Math.round(85 + fraction * 15));
+              displayedLoaded = expectedTotal;
+            } else {
+              pct = Math.min(85, Math.round(fraction * 85));
+              displayedLoaded = safeBytes;
+            }
+
+            const now = Date.now();
+            const timeDelta = (now - downloadSpeedRef.current.lastTime) / 1000;
+            let currentSpeed = downloadSpeedRef.current.smoothedSpeed;
+
+            if (timeDelta >= 0.25) {
+              const bytesDelta = safeBytes - downloadSpeedRef.current.lastBytes;
+              if (bytesDelta >= 0) {
+                const instantSpeed = bytesDelta / timeDelta;
+                currentSpeed = currentSpeed === 0 ? instantSpeed : 0.25 * instantSpeed + 0.75 * currentSpeed;
+                downloadSpeedRef.current = {
+                  lastBytes: safeBytes,
+                  lastTime: now,
+                  smoothedSpeed: currentSpeed,
+                };
+              }
+            }
+
+            const remainingBytes = Math.max(0, expectedTotal - safeBytes);
+            const eta = currentSpeed > 50000 ? Math.round(remainingBytes / currentSpeed) : null;
+
+            setDownloadProgress((prev) => {
+              const bestPct = prev && prev.filename === item.filename ? Math.max(prev.percent, pct) : pct;
+              const pctFinal = Math.min(100, bestPct);
+
+              showTransferProgressNotification({
+                type: 'download',
+                filename: item.filename,
+                current: i + 1,
+                total,
+                percent: pctFinal,
+                loadedBytes: displayedLoaded,
+                totalBytes: expectedTotal,
+                speedBytesPerSec: currentSpeed,
+                etaSeconds: phase === 'saving' ? null : eta,
+                phase,
+              }).catch(() => {});
+
+              return {
+                current: i + 1,
+                total,
+                filename: item.filename,
+                percent: pctFinal,
+                loadedBytes: displayedLoaded,
+                totalBytes: expectedTotal,
+                speedBytesPerSec: currentSpeed,
+                etaSeconds: phase === 'saving' ? null : eta,
+                phase,
+              };
+            });
+          });
+          downloadedCount++;
+          lastSavedPath = res.savedPath;
+          notifyFileDownloadCompleted(item.filename, res.savedPath).catch(() => {});
+          setPendingShares((prev) => prev.filter((p) => p.id !== item.id));
+        } catch (err: unknown) {
+          errors.push(`${item.filename}: ${formatErrorMessage(err, 'An error occurred')}`);
+        }
+      }
+    } finally {
+      setDownloadingId(null);
+      setDownloadingAll(false);
+      setDownloadProgress(null);
+      dismissTransferProgressNotification().catch(() => {});
+    }
 
     if (downloadedCount > 0) {
       setDownloadSuccess(
@@ -352,6 +557,21 @@ export const FileDropDeck: React.FC<FileDropDeckProps> = ({ apiClient }) => {
     if (bytes < 1024) return `${bytes} B`;
     if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  };
+
+  const formatSpeed = (bytesPerSec?: number) => {
+    if (!bytesPerSec || bytesPerSec <= 0) return '';
+    if (bytesPerSec < 1024) return `${Math.round(bytesPerSec)} B/s`;
+    if (bytesPerSec < 1024 * 1024) return `${(bytesPerSec / 1024).toFixed(1)} KB/s`;
+    return `${(bytesPerSec / (1024 * 1024)).toFixed(1)} MB/s`;
+  };
+
+  const formatEta = (seconds?: number | null) => {
+    if (!seconds || seconds <= 0 || !isFinite(seconds)) return '';
+    if (seconds < 60) return `~${Math.round(seconds)}s left`;
+    const mins = Math.floor(seconds / 60);
+    const secs = Math.round(seconds % 60);
+    return `~${mins}m ${secs}s left`;
   };
 
   const totalSelectedBytes = selectedFiles.reduce((acc, f) => acc + (f.size || 0), 0);
@@ -458,6 +678,8 @@ export const FileDropDeck: React.FC<FileDropDeckProps> = ({ apiClient }) => {
                 <View style={styles.progressDetailsRow}>
                   <Text style={styles.progressDetailText}>
                     Dropping {uploadProgress.current} of {uploadProgress.total}
+                    {uploadProgress.speedBytesPerSec > 0 ? ` • ${formatSpeed(uploadProgress.speedBytesPerSec)}` : ''}
+                    {uploadProgress.etaSeconds ? ` • ${formatEta(uploadProgress.etaSeconds)}` : ''}
                   </Text>
                   {uploadProgress.totalBytes > 0 && (
                     <Text style={styles.progressDetailText}>
@@ -613,7 +835,13 @@ export const FileDropDeck: React.FC<FileDropDeckProps> = ({ apiClient }) => {
               <Text style={styles.progressDetailText}>
                 {downloadProgress.phase === 'saving'
                   ? `Writing to storage (${downloadProgress.current} of ${downloadProgress.total})`
-                  : `Receiving from host (${downloadProgress.current} of ${downloadProgress.total})`}
+                  : `Receiving (${downloadProgress.current} of ${downloadProgress.total})`}
+                {downloadProgress.phase !== 'saving' && downloadProgress.speedBytesPerSec > 0
+                  ? ` • ${formatSpeed(downloadProgress.speedBytesPerSec)}`
+                  : ''}
+                {downloadProgress.phase !== 'saving' && downloadProgress.etaSeconds
+                  ? ` • ${formatEta(downloadProgress.etaSeconds)}`
+                  : ''}
               </Text>
               {downloadProgress.totalBytes > 0 && (
                 <Text style={styles.progressDetailText}>
