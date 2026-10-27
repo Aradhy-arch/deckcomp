@@ -10,7 +10,6 @@ import {
   WifiOff,
   X,
 } from 'lucide-react-native';
-import * as Updates from 'expo-updates';
 import React, { useEffect, useRef, useState } from 'react';
 import {
   Animated,
@@ -24,6 +23,11 @@ import {
   View,
 } from 'react-native';
 import { Palette } from '../constants/theme';
+import {
+  checkAndApplyPeriodicUpdate,
+  formatLastOtaCheckTime,
+  getLastOtaCheckTime,
+} from '../services/updateService';
 import { DeviceConfig, NetworkStatus } from '../types';
 import { ConfirmModal } from './ConfirmModal';
 
@@ -58,25 +62,30 @@ export const SideDrawer: React.FC<SideDrawerProps> = ({
   const [modalVisible, setModalVisible] = useState(visible);
   const [checkingUpdate, setCheckingUpdate] = useState(false);
   const [updateStatusText, setUpdateStatusText] = useState<string | null>(null);
+  const [lastCheckText, setLastCheckText] = useState<string>('');
   const isClosingRef = useRef(false);
 
   const handleCheckForUpdates = async () => {
-    if (__DEV__) {
-      setUpdateStatusText('Updates disabled in Dev');
-      setTimeout(() => setUpdateStatusText(null), 3000);
-      return;
-    }
     setCheckingUpdate(true);
     setUpdateStatusText('Checking...');
     try {
-      const check = await Updates.checkForUpdateAsync();
-      if (check.isAvailable) {
-        setUpdateStatusText('Downloading update...');
-        await Updates.fetchUpdateAsync();
-        setUpdateStatusText('Restarting app...');
-        await Updates.reloadAsync();
-      } else {
+      const res = await checkAndApplyPeriodicUpdate({
+        force: true,
+        onStatusMessage: (msg) => setUpdateStatusText(msg),
+      });
+
+      if (res.status === 'skipped_dev') {
+        setUpdateStatusText('Disabled in Dev');
+        setTimeout(() => setUpdateStatusText(null), 3000);
+      } else if (res.status === 'up_to_date') {
         setUpdateStatusText('App is up to date!');
+        setLastCheckText('Just now');
+        setTimeout(() => setUpdateStatusText(null), 3500);
+      } else if (res.status === 'deferred_transfer') {
+        setUpdateStatusText('Update queued after transfers');
+        setTimeout(() => setUpdateStatusText(null), 4000);
+      } else if (res.status === 'error') {
+        setUpdateStatusText('Check failed (offline)');
         setTimeout(() => setUpdateStatusText(null), 3500);
       }
     } catch {
@@ -84,6 +93,7 @@ export const SideDrawer: React.FC<SideDrawerProps> = ({
       setTimeout(() => setUpdateStatusText(null), 3500);
     } finally {
       setCheckingUpdate(false);
+      getLastOtaCheckTime().then((ts) => setLastCheckText(formatLastOtaCheckTime(ts)));
     }
   };
 
@@ -92,6 +102,7 @@ export const SideDrawer: React.FC<SideDrawerProps> = ({
 
   useEffect(() => {
     if (visible) {
+      getLastOtaCheckTime().then((ts) => setLastCheckText(formatLastOtaCheckTime(ts)));
       isClosingRef.current = false;
       setModalVisible(true);
       slideAnim.setValue(-DRAWER_WIDTH);
@@ -342,9 +353,14 @@ export const SideDrawer: React.FC<SideDrawerProps> = ({
               activeOpacity={0.7}
             >
               <RefreshCw size={15} color={checkingUpdate ? Palette.mauve : Palette.subtext0} />
-              <Text style={[styles.footerItemText, updateStatusText ? { color: Palette.mauve } : null]}>
-                {updateStatusText || 'Check for App Updates'}
-              </Text>
+              <View style={styles.updateTextContainer}>
+                <Text style={[styles.footerItemText, updateStatusText ? { color: Palette.mauve } : null]}>
+                  {updateStatusText || 'Check for App Updates'}
+                </Text>
+                <Text style={styles.updateCadenceText}>
+                  Auto-checks every 2 days {lastCheckText ? `• Last: ${lastCheckText}` : ''}
+                </Text>
+              </View>
             </TouchableOpacity>
           </View>
         </Animated.View>
@@ -603,5 +619,13 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: Palette.subtext0,
     fontWeight: '600',
+  },
+  updateTextContainer: {
+    flex: 1,
+  },
+  updateCadenceText: {
+    fontSize: 10,
+    color: Palette.overlay0,
+    marginTop: 1,
   },
 });

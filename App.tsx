@@ -37,6 +37,7 @@ import {
   showPersistentNotification,
   updateNotificationFeedback,
 } from './src/services/notificationService';
+import { checkAndApplyPeriodicUpdate } from './src/services/updateService';
 import {
   addOrUpdateDevice,
   getActiveDeviceId,
@@ -115,21 +116,14 @@ function DeckCompMain() {
     clientBatteryRef.current = clientBattery;
   }, [clientBattery]);
 
-  // Check and apply OTA updates automatically
+  // Check and apply OTA updates every 2 days
   useEffect(() => {
-    async function checkOtaUpdates() {
-      if (__DEV__) return;
-      try {
-        const check = await Updates.checkForUpdateAsync();
-        if (check.isAvailable) {
-          await Updates.fetchUpdateAsync();
-          await Updates.reloadAsync();
-        }
-      } catch {
-        // Silently ignore if offline
-      }
-    }
-    checkOtaUpdates();
+    checkAndApplyPeriodicUpdate().catch(() => {});
+    // Periodic check every 12 hours for long-running app sessions
+    const periodicTimer = setInterval(() => {
+      checkAndApplyPeriodicUpdate().catch(() => {});
+    }, 12 * 60 * 60 * 1000);
+    return () => clearInterval(periodicTimer);
   }, []);
 
   // Initialize Host Config from AsyncStorage
@@ -374,6 +368,7 @@ function DeckCompMain() {
           backgroundPollTimerRef.current = null;
         }
         fetchWorkstationData();
+        checkAndApplyPeriodicUpdate().catch(() => {});
         if (!pollTimerRef.current) {
           pollTimerRef.current = setInterval(fetchWorkstationData, 12000);
         }
