@@ -469,7 +469,7 @@ export class ApiClient {
   static async scanHost(
     ip: string,
     port: number = 8088,
-    timeoutMs: number = 300,
+    timeoutMs: number = 750,
     signal?: AbortSignal
   ): Promise<DiscoveredHost | null> {
     if (!ip || !ip.trim()) return null;
@@ -525,14 +525,14 @@ export class ApiClient {
   ): Promise<DiscoveredHost[]> {
     let baseSubnetPrefix: string | undefined;
     let port = portArg;
-    let timeoutMs = 300;
+    let timeoutMs = 750;
     let signal: AbortSignal | undefined;
     let onHostFound: ((host: DiscoveredHost) => void) | undefined = onHostFoundArg;
 
     if (typeof optionsOrPrefix === 'object' && optionsOrPrefix !== null) {
       baseSubnetPrefix = optionsOrPrefix.baseSubnetPrefix;
       port = optionsOrPrefix.port ?? 8088;
-      timeoutMs = optionsOrPrefix.timeoutMs ?? 300;
+      timeoutMs = optionsOrPrefix.timeoutMs ?? 750;
       signal = optionsOrPrefix.signal;
       onHostFound = optionsOrPrefix.onHostFound ?? onHostFoundArg;
     } else if (typeof optionsOrPrefix === 'string') {
@@ -541,7 +541,7 @@ export class ApiClient {
 
     if (signal?.aborted) return [];
 
-    const defaultPrefixes = ['192.168.1', '192.168.0', '192.168.31', '192.168.29', '192.168.43', '10.0.0'];
+    const defaultPrefixes = ['192.168.31', '192.168.1', '192.168.0', '192.168.29', '192.168.43', '192.168.2', '10.0.0'];
     let prefixes: string[] = [];
     if (baseSubnetPrefix && baseSubnetPrefix.trim()) {
       const clean = baseSubnetPrefix.trim();
@@ -604,7 +604,7 @@ export class ApiClient {
       }
     }
 
-    const BATCH_SIZE = 36;
+    const BATCH_SIZE = 18;
     for (let i = 0; i < phase1Candidates.length; i += BATCH_SIZE) {
       if (signal?.aborted) return results;
       const batch = phase1Candidates.slice(i, i + BATCH_SIZE);
@@ -636,9 +636,9 @@ export class ApiClient {
       }
     }
 
-    for (let i = 0; i < phase2Candidates.length; i += 40) {
+    for (let i = 0; i < phase2Candidates.length; i += 20) {
       if (signal?.aborted) return results;
-      const batch = phase2Candidates.slice(i, i + 40);
+      const batch = phase2Candidates.slice(i, i + 20);
       await probeBatch(batch);
       if (results.length > 0 && lockedPrefix) {
         return results;

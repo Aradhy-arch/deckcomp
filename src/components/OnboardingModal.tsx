@@ -35,6 +35,7 @@ import { Palette } from '../constants/theme';
 import {
   getLocalDeviceUuid,
   getUserDistro,
+  loadDevices,
   setOnboardingCompleted,
   setUserDistro,
 } from '../storage/deviceStorage';
@@ -194,13 +195,28 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({ visible, onCom
         setIp((prevIp) => (prevIp ? prevIp : host.ip));
       };
 
-      if (ip && ip.trim()) {
-        ApiClient.scanHost(ip.trim(), activePort, 300, controller.signal).then((direct) => {
+      // 1. Immediate scan of current input IP + any saved devices from history
+      const savedDevices = await loadDevices().catch(() => []);
+      const knownIps = new Set<string>();
+      if (ip && ip.trim()) knownIps.add(ip.trim());
+      for (const dev of savedDevices) {
+        if (dev.hostIp && dev.hostIp.trim()) knownIps.add(dev.hostIp.trim());
+      }
+
+      for (const knownIp of knownIps) {
+        ApiClient.scanHost(knownIp, activePort, 750, controller.signal).then((direct) => {
           if (direct) handleFoundHost(direct);
         });
       }
 
-      const subnetBase = ip && ip.includes('.') ? ip.trim().split('.').slice(0, 3).join('.') : undefined;
+      // 2. Discover local subnet with streaming callback
+      let subnetBase: string | undefined = undefined;
+      if (ip && ip.includes('.')) {
+        subnetBase = ip.trim().split('.').slice(0, 3).join('.');
+      } else if (savedDevices.length > 0 && savedDevices[0].hostIp?.includes('.')) {
+        subnetBase = savedDevices[0].hostIp.trim().split('.').slice(0, 3).join('.');
+      }
+
       await ApiClient.discoverSubnet({
         baseSubnetPrefix: subnetBase,
         port: activePort,
