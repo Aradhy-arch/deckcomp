@@ -16,7 +16,7 @@ KillMode=mixed
 
 # Security sandbox
 ProtectSystem=strict
-ReadWritePaths=%h/Downloads %h/.config/deckcomp %h/.config/deckcompanion %h/.local/share/deckcomp %h/.local/share/deckcompanion /run/user/%U /tmp
+ReadWritePaths=-%h/Downloads -%h/.config/deckcomp -%h/.config/deckcompanion -%h/.local/share/deckcomp -%h/.local/share/deckcompanion /run/user/%U /tmp
 ProtectHome=read-only
 
 [Install]
